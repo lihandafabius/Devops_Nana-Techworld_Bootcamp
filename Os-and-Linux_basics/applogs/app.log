@@ -1,0 +1,7 @@
+successfully set LOG_DIR environment variable. Writing logs into /home/fabius-lihanda/Devops_Nana-Techworld_Bootcamp/Os-and-Linux_basics/applogs
+-----------------------------
+Logging into the app.log file
+Application started successfully using all the provided environment variables
+Node app will listen for any incoming connections
+This is the end of log entries
+-----------------------------

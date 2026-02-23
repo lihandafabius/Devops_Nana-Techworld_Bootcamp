@@ -1,5 +1,25 @@
 #!/bin/bash
 
+# Accept log directory parameter
+if [ -z "$1" ]
+then
+    echo "Usage: $0 <log_directory>"
+    exit 1
+fi
+
+LOG_DIRECTORY=$1
+
+if [ ! -d "$LOG_DIRECTORY" ]
+then
+    echo "Log directory does not exist. Creating it..."
+    mkdir -p "$LOG_DIRECTORY"
+fi
+
+LOG_DIRECTORY=$(realpath "$LOG_DIRECTORY")
+export LOG_DIR=$LOG_DIRECTORY
+
+echo "LOG_DIR set to $LOG_DIR"
+
 # check if installed or not
 if node -v >/dev/null 2>&1 && npm -v >/dev/null 2>&1
 then
@@ -45,7 +65,7 @@ npm install
 
 # Run app in background
 echo "Starting Node app in background..."
-node server.js > app.log 2>&1 &
+node server.js &
 
 # Get Pid of the last backround process
 PID=$!
