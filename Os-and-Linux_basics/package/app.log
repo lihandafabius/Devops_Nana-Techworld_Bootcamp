@@ -1,8 +1,0 @@
-app listening on port 3000!
------------------------------
-successfully set the following environment variables: 
-APP_ENV - dev
-DB_USER - myuser
-DB_PWD - mysecret
------------------------------
-Optional LOG_DIR environment variable not set
