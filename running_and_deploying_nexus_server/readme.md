@@ -1,4 +1,15 @@
-</details>
+## 📦 Nexus Repository Manager 
+
+This project demonstrates the setup and usage of a repository manager to handle application artifacts across different technologies.  
+Using Nexus, I implemented workflows for storing, managing, and deploying both Node.js and Java artifacts, simulating real-world DevOps practices such as artifact versioning, access control, and automated deployment.
+
+The exercises cover:
+- Installing and configuring Nexus on a cloud server  
+- Creating and managing npm and Maven repositories  
+- Setting up users and roles for team-based access  
+- Publishing and retrieving artifacts  
+- Deploying applications from a remote server using the Nexus REST API  
+
 
 ******
 
@@ -168,38 +179,84 @@ For this exercise, I built a Java application with Maven and published the `.jar
 
 <details>
 <summary>Exercise 8: Download from Nexus and start application </summary>
- <br />
+<br />
 
-- Create a new user in the Nexus UI, and grant *both* of the roles previously created to it
-![user_3_creation](Exercise8_1.png)
-- Execute `curl -u {user}:{password} -X GET 'http://{nexus-ip}:8081/service/rest/v1/components?repository={repo-name}&sort=version'` on the DigitalOcean droplet
-- Execute `wget` followed by the result of the previous command
-![wget_response](Exercise8_2.png)
-- Execute `java -jar java-app-1.0.jar`
+For this exercise, I retrieved the latest Node.js artifact from Nexus using the REST API and deployed it on the AWS remote instance.
+
+### Steps:
+
+- Created a new Nexus user (user3) with access to both npm and Maven repositories
+
+  
+![user3](user3.png)  
+
+
+- Used the Nexus REST API to fetch metadata for the Node.js artifact:
+
+![fetch url](fetch.png) 
+
+- Extracted the download URL of the latest artifact from the response
+
+```bash
+curl -s -u mvnpm-user:PASSWORD \
+"http://18.234.79.188:8081/service/rest/v1/search?repository=npm-repository" \
+| jq -r '.items[0].assets[0].downloadUrl'
+```
+- Downloaded, extracted, and installed dependencies inside the remote server
+
+![download url](download.png) 
+
+- Started the Node.js application
+
+![start](start.png) 
+
+-Verified that the application was running successfully. I had also to allow inbound traffic from port 3000 on the remote server security group
+
+![verify](verify.png) 
+
 
 </details>
 
 ******
 <details>
-<summary>Exercise 9: Automate </summary>
- <br />
+<summary>Exercise 9: Automation </summary>
 
-- Create a **.sh** file on the DigitalOcean droplet and ensure it has execute permissions
-- The **.sh** file should contain the following:
-```sh
-# save the artifact details in a json file
-curl -u {user}:{password} -X GET 'http://{nexus-ip}:8081/service/rest/v1/components?repository={repo-name}&sort=version' | jq "." > artifact.json
+- Finally I decided to automate the whole process using a ![script](script.sh) file I created on my local machine, used scp to transfer it to the remote server after thorough testing.
+- Gave the script necessary permissions then executed it and the application started succesfuly
 
-# grab the download url from the saved artifact details using 'jq' json processor tool
-artifactDownloadUrl=$(jq -r '.items[].assets[].downloadUrl | select(endswith(".jar"))' artifact.json)
-
-# fetch the artifact with the extracted download url using 'wget' tool
-wget --http-user={user} --http-password={password} "$artifactDownloadUrl" -O java-app.jar
-
-# Run the Java application
-java -jar java-app.jar
-```
-- Execute the shell script on the server
-![shell_script](Exercise9_1.png)
 </details>
+
+******
+
+### Key Learnings:
+
+- **What Nexus is:**  
+  Nexus is a repository manager that acts as a central storage for build artifacts (e.g., npm packages, JAR files, Docker images). It allows teams to manage, version, and distribute artifacts efficiently across projects.
+
+- **Why it is important:**  
+  It provides a single source of truth for artifacts, making it essential for **CI/CD pipelines**, where applications are built once and deployed consistently across environments.
+
+- **Multi-repository management:**  
+  Nexus supports multiple repository formats (npm, Maven, Docker, etc.), enabling teams to manage different types of artifacts in one place.
+
+- **Integration capabilities:**  
+  It integrates with tools via a **REST API** and supports **LDAP integration** for centralized user authentication and access control.
+
+- **Automation & CI/CD:**  
+  Nexus can be easily integrated into CI/CD pipelines to automate artifact publishing and retrieval during build and deployment processes.
+
+- **Cleanup policies:**  
+  Automated cleanup policies help manage storage by deleting old or unused artifacts based on defined rules (e.g., age, version, or usage), preventing storage bloat.
+
+- **Scheduled tasks:**  
+  Tasks such as cleanup, repository maintenance, and backups can be scheduled to run automatically, improving system reliability and reducing manual effort.
+
+- **Backup and restore:**  
+  Nexus supports backup strategies to ensure artifact data can be recovered in case of failure.
+
+- **Search and metadata:**  
+  Powerful search functionality and metadata tagging make it easy to locate and organize artifacts across repositories.
+
+- **Security and authentication:**  
+  Supports user roles, permissions, and token-based authentication for secure access, including system users for automated processes.
 
