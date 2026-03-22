@@ -1,8 +1,8 @@
 #!/bin/bash
 
-NEXUS_USER="mvnpm-user"
-NEXUS_PASS="Sirikali4502"
-NEXUS_URL="http://3.84.40.188:8081"
+NEXUS_USER=""
+NEXUS_PASS=""
+NEXUS_URL="http://<server ip>:8081"
 REPO="npm-repository"
 APP_NAME="bootcamp-node-project"
 
