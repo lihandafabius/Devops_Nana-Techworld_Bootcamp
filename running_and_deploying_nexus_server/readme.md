@@ -221,7 +221,7 @@ curl -s -u mvnpm-user:PASSWORD \
 <details>
 <summary>Exercise 9: Automation </summary>
 
-- Finally I decided to automate the whole process using a ![script](script.sh) file I created on my local machine, used scp to transfer it to the remote server after thorough testing.
+- Finally I decided to automate the whole process using a [script](script.sh) file I created on my local machine, used scp to transfer it to the remote server after thorough testing.
 - Gave the script necessary permissions then executed it and the application started succesfuly
 
 </details>
