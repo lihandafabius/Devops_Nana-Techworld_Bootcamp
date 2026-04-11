@@ -1,0 +1,46 @@
+services:
+  java-app:
+    image: localhost:8083/java-app:1.0
+    ports:
+      - "8080:8080"
+    environment:
+      DB_SERVER: mysql
+      DB_USER: ${DB_USER}
+      DB_PWD: ${DB_PWD}
+      DB_NAME: team-member-projects
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  mysql:
+    image: mysql
+    container_name: mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: team-member-projects
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PWD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  phpmyadmin:
+    image: phpmyadmin
+    container_name: phpmyadmin
+    ports:
+      - "8084:80"
+    restart: always
+    environment:
+      PMA_HOST: mysql
+    depends_on:
+      - mysql
+volumes:
+  mysql-data:
+    driver: local

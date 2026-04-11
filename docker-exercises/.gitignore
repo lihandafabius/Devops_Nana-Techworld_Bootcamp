@@ -2,3 +2,6 @@
 build
 out
 .gradle*
+secrets/
+*.txt
+.env
