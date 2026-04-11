@@ -171,17 +171,43 @@ ENTRYPOINT ["java", "-jar", "app.jar"]
 <summary>Exercise 5: Build & Push Docker Image to Nexus </summary>
 <br />
 
-To enable remote deployment, the application image was stored in a private registry.
+To enable remote deployment, the application image was stored in a private Docker registry hosted on Nexus.
 
 ### Steps:
 
-* Created a **Docker hosted repository** in Sonatype Nexus Repository Manager
-* Built Docker image locally
-* Tagged image with Nexus repository address
-* Pushed image to Nexus
-* Verified image availability in Nexus UI
+* Deployed **Sonatype Nexus Repository Manager** as a Docker container on the AWS EC2 instance
+
+* Opened required ports (**8081** for UI, **8083** for Docker registry) in the security group
+
+* Created a **Docker (hosted)** repository in Nexus
+
+* Configured an HTTP connector on port **8083** for Docker access
+
+* Created a dedicated role with full access to the Docker repository
+
+* Created a user and assigned the role
+
+* Built the Docker image locally
+
+* Tagged the image with the Nexus repository endpoint
+
+* Configured Docker daemon (`daemon.json`) to allow **insecure registry** access (HTTP)
+
+* Logged in to the Nexus Docker registry
+
+* Pushed the image to Nexus
+
+* Verified the image in the Nexus UI
+
+### Key Concepts:
+
+* **Private registry:** Stores and manages Docker images securely
+* **Access control:** Roles and users restrict who can push/pull images
+* **Insecure registry (HTTP):** Required when SSL is not configured (common in dev setups)
+* **Remote artifact storage:** Enables pulling images from any server
 
 </details>
+
 
 ---
 
