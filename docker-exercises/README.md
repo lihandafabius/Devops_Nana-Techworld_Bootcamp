@@ -211,17 +211,97 @@ To enable remote deployment, the application image was stored in a private Docke
 
 ---
 
+Here’s a clean, polished version of your **Exercise 6** section with all your key decisions explained clearly 👇
+
+---
+
 <details>
 <summary>Exercise 6: Add Application to Docker Compose </summary>
 <br />
 
-The application was integrated into the Compose setup.
+The Java application was integrated into the multi-container setup and configured for remote deployment.
 
 ### Steps:
 
-* Added Java app service to `docker-compose.yaml`
-* Configured environment variables for DB connection
-* Implemented MySQL health check:
+* Added the Java application service to `docker-compose.yaml` using the image from the private Nexus registry
+
+  ### docker-compose.yaml
+
+```yaml
+services:
+  java-app:
+    image: localhost:8083/java-app:1.0
+    ports:
+      - "8080:8080"
+    environment:
+      DB_SERVER: mysql
+      DB_USER: ${DB_USER}
+      DB_PWD: ${DB_PWD}
+      DB_NAME: team-member-projects
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  mysql:
+    image: mysql
+    container_name: mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: team-member-projects
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PWD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+
+  phpmyadmin:
+    image: phpmyadmin
+    container_name: phpmyadmin
+    ports:
+      - "8084:80"
+    restart: always
+    environment:
+      PMA_HOST: mysql
+    depends_on:
+      - mysql
+volumes:
+  mysql-data:
+    driver: local
+```
+
+* Used `localhost:8083/java-app:1.0` as the image source since the registry is running on the **same server** as Docker
+  → This avoids external network calls and allows faster, internal image pulls
+
+* Updated `index.html` to use the **remote server’s IP address** instead of `localhost`
+  → Ensures the frontend communicates correctly with the backend when accessed from a browser
+
+* Rebuilt the Docker image and pushed the updated version to the Nexus repository
+
+* Externalized sensitive configuration using a `.env` file:
+
+* Secured the `.env` file with restricted permissions:
+
+  ```bash
+  chmod 600 .env
+  ```
+
+* Transferred the `docker-compose.yaml` file securely to the remote server using `scp`
+
+* Configured environment variables in Compose using variable substitution:
+
+  ```yaml
+  DB_USER: ${DB_USER}
+  DB_PWD: ${DB_PWD}
+  ```
+
+* Implemented MySQL health check to ensure proper startup order:
 
 ```yaml
 healthcheck:
@@ -231,11 +311,15 @@ healthcheck:
   retries: 5
 ```
 
-* Used `depends_on` with `service_healthy` condition
+* Used `depends_on` with `service_healthy` condition to delay app startup until MySQL is ready
 
-### Result:
+### Key Concepts:
 
-* Ensured correct startup order (DB → App)
+* **Local registry access (`localhost`)**: Works because Nexus and Docker run on the same host
+* **Environment variable externalization**: Keeps sensitive data out of version control
+* **.env security**: Restricting permissions prevents unauthorized access
+* **Service dependency management**: Ensures correct startup order in multi-container apps
+* **Frontend-backend separation**: Requires proper host configuration when deployed remotely
 
 </details>
 
