@@ -92,7 +92,7 @@ Instead of starting containers manually, I used Docker Compose to manage both se
 * Used environment variables for dynamic configuration  
 * Connected phpMyAdmin to MySQL using the service name (`mysql`) via `PMA_HOST`  
 
-### docker-compose.yaml
+### mysql-compose.yaml
 
 ```yaml
 services:
@@ -133,14 +133,35 @@ volumes:
 <summary>Exercise 4: Dockerizing the Java Application </summary>
 <br />
 
-The Java application was containerized to run alongside other services.
+The Java application was containerized to run alongside MySQL and phpMyAdmin using Docker.
+
+### Dockerfile:
+
+```dockerfile
+FROM eclipse-temurin:17-jdk-alpine
+
+RUN mkdir -p /home/java-app
+
+WORKDIR /home/java-app 
+
+COPY build/libs/*.jar app.jar   
+
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
 
 ### Steps:
 
-* Created a `Dockerfile` for the application
+* Created a lightweight Docker image using a minimal base image (`alpine`)
 * Built the application JAR using Gradle
-* Packaged the application into a Docker image
-* Verified container runs successfully
+* Copied the JAR into the container
+* Defined the entrypoint to run the application
+* Built and tested the container locally
+
+### Key Concepts:
+
+* **Minimal base image:** Using `alpine` reduces image size and improves security by minimizing the attack surface
+* **Containerization:** Ensures the app runs consistently across environments
+* **Layer caching:** Separating steps improves build efficiency
 
 </details>
 
