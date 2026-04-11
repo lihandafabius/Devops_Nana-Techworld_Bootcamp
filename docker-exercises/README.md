@@ -79,21 +79,52 @@ To visualize and manage MySQL database data, I deployed a UI tool as a Docker co
 ---
 
 <details>
-<summary>Exercise 3: Docker Compose for MySQL & phpMyAdmin </summary>
+
+<summary>Exercise 3: Use Docker Compose for MySQL and phpMyAdmin </summary>
 <br />
 
-To simplify container management, I introduced Docker Compose.
+Instead of starting containers manually, I used Docker Compose to manage both services together.
 
 ### Steps:
 
-* Created a `docker-compose.yaml` file
-* Defined both MySQL and phpMyAdmin services
-* Configured:
+* Created a `docker-compose` file for MySQL and phpMyAdmin  
+* Configured a named volume for persistent database storage  
+* Used environment variables for dynamic configuration  
+* Connected phpMyAdmin to MySQL using the service name (`mysql`) via `PMA_HOST`  
 
-  * Shared network
-  * Persistent volume for database (`mysql-data`)
-* Verified both services start together
+### docker-compose.yaml
 
+```yaml
+services:
+
+  mysql:
+    image: mysql
+    container_name: mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: team-member-projects
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PWD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+  phpmyadmin:
+    image: phpmyadmin
+    container_name: phpmyadmin
+    ports:
+      - "8084:80"
+    restart: always
+    environment:
+      PMA_HOST: mysql
+    depends_on:
+      - mysql
+
+volumes:
+  mysql-data:
+    driver: local
+```
 </details>
 
 ---
