@@ -208,11 +208,6 @@ To enable remote deployment, the application image was stored in a private Docke
 
 </details>
 
-
----
-
-Here’s a clean, polished version of your **Exercise 6** section with all your key decisions explained clearly 👇
-
 ---
 
 <details>
