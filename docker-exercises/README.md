@@ -286,6 +286,11 @@ volumes:
 
 * Externalized sensitive configuration using a `.env` file:
 
+  ```bash
+  DB_USER=admin
+  DB_PWD=adminpass
+  ```
+
 * Secured the `.env` file with restricted permissions:
 
   ```bash
@@ -329,22 +334,45 @@ healthcheck:
 <summary>Exercise 7: Deploy Application on Remote Server </summary>
 <br />
 
-The application stack was deployed on a cloud server.
+The complete application stack was deployed on a remote AWS server using Docker Compose.
 
 ### Steps:
 
-* Configured Docker to allow insecure registry (HTTP Nexus)
-* Logged into Nexus Docker repository
-* Transferred `docker-compose.yaml` to server using `scp`
-* Externalized environment variables using `.env` file
-* Fixed frontend issue:
+* Configured Docker to allow pulling from the Nexus HTTP registry by updating `daemon.json`:
 
-  * Replaced hardcoded `localhost` with dynamic host (`window.location.hostname`)
-* Started services using:
+```json
+{
+  "insecure-registries": ["localhost:8083"]
+}
+```
+
+* Restarted Docker to apply changes
+
+* Logged in to the private Nexus Docker registry:
+
+```bash
+docker login localhost:8083
+```
+
+* Ensured required environment variables were available via `.env` file
+
+* Started all services using Docker Compose:
 
 ```bash
 docker compose up -d
 ```
+
+* Verified running containers:
+
+```bash
+docker ps
+```
+
+### Key Concepts:
+
+* **Insecure registry configuration:** Required when using HTTP instead of HTTPS
+* **Authentication:** Needed to pull private images from Nexus
+* **Compose orchestration:** Starts and manages multiple containers together
 
 </details>
 
@@ -354,15 +382,33 @@ docker compose up -d
 <summary>Exercise 8: Open Ports & Access Application </summary>
 <br />
 
-To access the application externally:
+After deploying the application, firewall configuration was required to allow external access.
 
 ### Steps:
 
-* Opened required ports in server firewall:
+* Opened required ports in the AWS security group:
 
-  * `8080` → Java app
+  * `8080` → Java application
   * `8084` → phpMyAdmin
-* Verified application access via browser
+
+* Ensured inbound rules allowed traffic from external sources
+
+* Accessed the application via browser using the server’s public IP:
+
+  * `<server-ip>:8080` → Application UI
+  * `<server-ip>:8084` → phpMyAdmin
+
+* Verified that:
+
+  * Application loads successfully
+  * Data is retrieved from MySQL
+  * Updates made via UI persist in the database
+
+### Key Concepts:
+
+* **Port exposure:** Containers must map ports to the host to be accessible externally
+* **Cloud firewall (Security Groups):** Controls inbound/outbound traffic to the instance
+* **End-to-end connectivity:** Validates communication between frontend, backend, and database
 
 </details>
 
