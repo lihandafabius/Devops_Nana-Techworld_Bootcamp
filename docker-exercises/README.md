@@ -44,7 +44,7 @@ These are some of the **techniques for handling senstive data** I considered to 
 <summary>Exercise 1: Start MySQL Container </summary>
 <br />
 
-Instead of installing MySQL locally, I used Docker to quickly spin up a database container.
+I used Docker to quickly spin up a mysql database container in my local machine.
 
 ### Steps:
 
@@ -55,8 +55,8 @@ Instead of installing MySQL locally, I used Docker to quickly spin up a database
   * `MYSQL_DATABASE`
   * `MYSQL_USER`
   * `MYSQL_PASSWORD`
-* Exposed port `3306`
-* Verified database connectivity from the application
+* Exposed port `3306`. I had another mysql instance locally, so I had to kill the instance with the Instance's process ID
+* Verified database connectivity from the application by querying the database using mysql cli interface by use of `mysql -h 127.0.0.1 -p 3306 -u admin -p`
 
 </details>
 
