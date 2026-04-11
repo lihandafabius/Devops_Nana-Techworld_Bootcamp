@@ -20,12 +20,21 @@ The exercises cover:
 <br />
 
 For this exercise, I cloned the project repository and reviewed how environment variables are used within the application.
+Also I reviewed some of the techniques I would use to handle sensitive env varaibles values like root passwords, user passwords etc.
+
+These are some of the **techniques for handling senstive data** I considered to use:
+
+* **Exporting variables (shell)** → quick for local testing
+* **`.env` file** → simple to use (add to `.gitignore`)
+* **Docker secrets** → more secure, not exposed as env variables
+* **Cloud secret managers** (e.g. AWS Secrets Manager, HashiCorp Vault) → best for production
 
 ### Key Concepts:
 
 * Sensitive values (e.g., DB credentials) should **not be hardcoded**
 * Environment variables allow **flexible configuration across environments**
 * Improves **security and portability**
+
 
 </details>
 
