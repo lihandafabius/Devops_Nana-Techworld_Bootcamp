@@ -66,13 +66,13 @@ I used Docker to quickly spin up a mysql database container in my local machine.
 <summary>Exercise 2: Start phpMyAdmin Container </summary>
 <br />
 
-To visualize and manage database data, I deployed a UI tool.
+To visualize and manage MySQL database data, I deployed a UI tool as a Docker container.
 
 ### Steps:
 
-* Started container using phpMyAdmin
-* Configured connection to MySQL container
-* Accessed via browser and successfully logged in
+* Started phpMyAdmin container using the official image  
+* Configured connection to MySQL using `PMA_HOST`, set to the MySQL service/container name (Docker internal DNS)  
+* Accessed via browser and successfully logged in using the database credentials defined in the MySQL container
 
 </details>
 
