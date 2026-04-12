@@ -66,7 +66,7 @@ I used Docker to quickly spin up a mysql database container in my local machine.
 <summary>Exercise 2: Start phpMyAdmin Container </summary>
 <br />
 
-To visualize and manage MySQL database data, I deployed a UI tool as a Docker container.
+To visualize and manage MySQL database data, I deployed a UI tool as a Docker container locally.
 
 ### Steps:
 
@@ -180,10 +180,14 @@ To enable remote deployment, the application image was stored in a private Docke
 * Opened required ports (**8081** for UI, **8083** for Docker registry) in the security group
 
 * Created a **Docker (hosted)** repository in Nexus
+  
+  ![Docker-hosted Repository](docker-repo.png)
 
 * Configured an HTTP connector on port **8083** for Docker access
 
 * Created a dedicated role with full access to the Docker repository
+  
+  ![Nexus Role](role.png)
 
 * Created a user and assigned the role
 
@@ -193,9 +197,13 @@ To enable remote deployment, the application image was stored in a private Docke
 
 * Configured Docker daemon (`daemon.json`) to allow **insecure registry** access (HTTP)
 
+  ![Insecure registry](insecure_reg.png)
+
 * Logged in to the Nexus Docker registry
 
 * Pushed the image to Nexus
+
+  ![Push to nexus](push.png)
 
 * Verified the image in the Nexus UI
 
