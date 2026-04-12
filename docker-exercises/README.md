@@ -195,10 +195,6 @@ To enable remote deployment, the application image was stored in a private Docke
 
 * Tagged the image with the Nexus repository endpoint
 
-* Configured Docker daemon (`daemon.json`) to allow **insecure registry** access (HTTP)
-
-  ![Insecure registry](insecure_reg.png)
-
 * Logged in to the Nexus Docker registry
 
 * Pushed the image to Nexus
@@ -287,21 +283,6 @@ volumes:
 
 * Rebuilt the Docker image and pushed the updated version to the Nexus repository
 
-* Externalized sensitive configuration using a `.env` file:
-
-  ```bash
-  DB_USER=admin
-  DB_PWD=adminpass
-  ```
-
-* Secured the `.env` file with restricted permissions:
-
-  ```bash
-  chmod 600 .env
-  ```
-
-* Transferred the `docker-compose.yaml` file securely to the remote server using `scp`
-
 * Configured environment variables in Compose using variable substitution:
 
   ```yaml
@@ -321,9 +302,15 @@ healthcheck:
 
 * Used `depends_on` with `service_healthy` condition to delay app startup until MySQL is ready
 
+* Transferred the `docker-compose.yaml` file securely to the remote server using `scp`
+
+  ```bash
+  scp -i ~/Downloads/server_publickey.pem docker-compose-file ubuntu@<server_ip>:/home/ubuntu
+  ```
+
 ### Key Concepts:
 
-* **Local registry access (`localhost`)**: Works because Nexus and Docker run on the same host
+* **Local registry access (`localhost`)**: Works because Nexus and Docker run on the same host remote server
 * **Environment variable externalization**: Keeps sensitive data out of version control
 * **.env security**: Restricting permissions prevents unauthorized access
 * **Service dependency management**: Ensures correct startup order in multi-container apps
@@ -348,8 +335,13 @@ The complete application stack was deployed on a remote AWS server using Docker 
   "insecure-registries": ["localhost:8083"]
 }
 ```
+  ![Insecure registry](insecure_reg.png)
 
 * Restarted Docker to apply changes
+
+  ```bash
+  systemctl restart docker
+  ```
 
 * Logged in to the private Nexus Docker registry:
 
@@ -357,7 +349,18 @@ The complete application stack was deployed on a remote AWS server using Docker 
 docker login localhost:8083
 ```
 
-* Ensured required environment variables were available via `.env` file
+* Externalized sensitive configuration using a `.env` file:
+
+  ```bash
+  DB_USER=...
+  DB_PWD=...
+  ```
+
+* Secured the `.env` file with restricted permissions:
+
+  ```bash
+  chmod 600 .env
+  ```
 
 * Started all services using Docker Compose:
 
@@ -396,10 +399,17 @@ After deploying the application, firewall configuration was required to allow ex
 
 * Ensured inbound rules allowed traffic from external sources
 
+![Security Group](sg.png)
+
 * Accessed the application via browser using the server’s public IP:
 
   * `<server-ip>:8080` → Application UI
+
+  ![Application](application.png)
+    
   * `<server-ip>:8084` → phpMyAdmin
+ 
+  ![Phpmyadmin](phpmyadmin.png)
 
 * Verified that:
 
@@ -417,103 +427,59 @@ After deploying the application, firewall configuration was required to allow ex
 
 ---
 
-## ⚠️ Challenges & Fixes
+## Challenges & Fixes
 
-### 1. ❌ MySQL container port conflict
+### 1. Docker disk space issues
 
-* **Issue:** Port `3306` already in use
-* **Fix:** Changed port mapping or stopped local MySQL service
-
----
-
-### 2. ❌ Container not starting (exit errors)
-
-* **Issue:** Missing or incorrect environment variables
-* **Fix:** Verified and aligned variable names with application config
+* **Issue:** “no space left on device” when pulling images. The initial AWS instance had insufficient storage for large Docker images
+* **Fix:** Increased EBS volume size and extended the filesystem to utilize the new space
 
 ---
 
-### 3. ❌ Database connection failure
+### 2. Docker installation issues (Snap vs apt)
 
-* **Issue:** Wrong DB host (`localhost`)
-* **Fix:** Used service name (`mysql`) inside Docker network
+* **Issue:** Using Docker installed via **Snap** caused multiple problems, including permission issues, unexpected configuration paths, and compatibility issues with Docker Compose and daemon configuration
 
----
+* **Fix:**
 
-### 4. ❌ Frontend not updating / buttons not working
-
-* **Issue:** Hardcoded `localhost` in frontend
-* **Fix:** Replaced with dynamic host:
-
-```javascript
-const HOST = window.location.hostname;
-```
+  * Removed Snap-based Docker installation
+  * Installed Docker using the official `docker.io` package via `apt`
+  * This provided a more stable setup with expected configuration paths (e.g., `/etc/docker/daemon.json`) and better compatibility with Docker Compose
 
 ---
 
-### 5. ❌ Nexus Docker login issues
+### Key Learnings:
 
-* **Issue:** HTTP registry blocked
-* **Fix:** Configured Docker `insecure-registries`
+- **Use trusted images:** Always use official and verified base images to reduce security risks  
 
----
+- **Versioning matters:** Avoid `latest` — use specific image tags for consistency and reliability  
 
-### 6. ❌ Docker disk space issues
-
-* **Issue:** “no space left on device”
-* **Fix:** Increased AWS volume + extended filesystem
+- **Minimal images:** Prefer lightweight images (e.g., Alpine) to reduce size and attack surface  
 
 ---
 
-### 7. ❌ Image pull failures
-
-* **Issue:** Network interruptions
-* **Fix:** Retried pulls / cached images in Nexus
-
----
-
-## 📚 Key Learnings
-
-* **Containerization:**
-  Docker allows packaging applications and dependencies into portable containers.
-
-* **Multi-container orchestration:**
-  Docker Compose simplifies managing multiple interconnected services.
-
-* **Networking in Docker:**
-  Containers communicate using service names, not `localhost`.
-
-* **Environment variable management:**
-  Externalizing configuration improves security and flexibility.
-
-* **Private container registry:**
-  Using Sonatype Nexus Repository Manager enables secure image storage and distribution.
-
-* **Debugging skills:**
-  Learned to troubleshoot:
-
-  * Networking issues
-  * Container startup failures
-  * Volume and disk space problems
-
-* **Cloud deployment:**
-  Successfully deployed a multi-container application on a remote server.
-
-* **Security practices:**
-  Avoided hardcoding sensitive data and explored safer alternatives like `.env` and Docker secrets.
+- **Optimize image size:**
+  - Use `.dockerignore` to exclude unnecessary files (e.g., `.git`, logs, dependencies not needed at runtime)  
+  - **Leverage layer caching:**  
+    Structure your Dockerfile so that rarely changing steps (like installing dependencies) come before frequently changing ones (like copying source code). This allows Docker to reuse cached layers and significantly speeds up builds  
+  - **Use multi-stage builds:**  
+    Separate the build stage (with build tools like Maven/Gradle) from the runtime stage. Only copy the final artifact into a minimal image → results in smaller, cleaner, and more secure images  
 
 ---
 
-## 🚀 Final Outcome
-
-A fully containerized application stack running on a remote server, including:
-
-* Java backend application
-* MySQL database
-* phpMyAdmin UI
-* Private Docker registry integration
-
-All services are orchestrated using a single `docker-compose` file and can be deployed with one command.
+- **Security best practices:**
+  - Run containers with a **non-root user** (least privilege principle)  
+  - Avoid exposing sensitive data inside images (use environment variables or external configs)  
+  - Regularly scan images for vulnerabilities  
 
 ---
+
+- **Clean Dockerfiles:**
+  - Keep them simple, readable, and maintainable  
+  - Structure layers efficiently to improve build performance and caching  
+
+
+
+
+
 
