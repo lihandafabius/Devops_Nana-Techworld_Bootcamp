@@ -74,6 +74,11 @@ I used Docker to quickly spin up a mysql database container in my local machine.
   ./gradlew build
   ```
   
+* Run the artifact after setting the env variables
+  
+  ```bash
+  java -jar build/libs/docker-exercises-project-1.0-SNAPSHOT.jar
+  ```
 * Verified database connectivity from the application by querying the database using mysql cli interface by use of `mysql -h 127.0.0.1 -p 3306 -u admin -p`
 
 </details>
