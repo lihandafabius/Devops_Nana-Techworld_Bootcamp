@@ -55,17 +55,17 @@ I used Docker to quickly spin up a mysql database container in my local machine.
   * `MYSQL_DATABASE`
   * `MYSQL_USER`
   * `MYSQL_PASSWORD`
+
+    ```bash
+    docker run -p 3306:3306 \
+     --name mysql \
+     -e MYSQL_ROOT_PASSWORD= ... \
+     -e MYSQL_DATABASE=... \
+     -e MYSQL_USER=... \
+     -e MYSQL_PASSWORD=... \
+     -d mysql
+    ```
     
-  ```bash
-  
-  docker run -p 3306:3306 \
-  --name mysql \
-  -e MYSQL_ROOT_PASSWORD= ... \
-  -e MYSQL_DATABASE=... \
-  -e MYSQL_USER=... \
-  -e MYSQL_PASSWORD=... \
-  -d mysql
-  ```
 * Exposed port `3306`. I had another mysql instance locally, so I had to kill the instance with the Instance's process ID
 * Build the artifact
 
@@ -79,7 +79,7 @@ I used Docker to quickly spin up a mysql database container in my local machine.
   ```bash
   java -jar build/libs/docker-exercises-project-1.0-SNAPSHOT.jar
   ```
-* Verified database connectivity from the application by querying the database using mysql cli interface by use of `mysql -h 127.0.0.1 -p 3306 -u admin -p`
+* Verified database connectivity from the application by querying the database using mysql cli interface by use of `mysql -h 127.0.0.1 -p 3306 -u admin -p` after editing from the application
 
 </details>
 
@@ -94,8 +94,15 @@ To visualize and manage MySQL database data, I deployed a UI tool as a Docker co
 ### Steps:
 
 * Started phpMyAdmin container using the official image  
-* Configured connection to MySQL using `PMA_HOST`, set to the MySQL service/container name (Docker internal DNS)  
-* Accessed via browser and successfully logged in using the database credentials defined in the MySQL container
+* Configured connection to MySQL using `PMA_HOST`, set to the MySQL service/container name (Docker internal DNS) in the same network
+  
+  ```bash
+  docker run --name phpmyadmin -d \
+  -e PMA_HOST=mysql \
+  -p 8080:80 phpmyadmin
+  ```
+   
+* Accessed via browser and successfully logged in using the database credentials defined in the MySQL container ```localhost:8083```
 
 </details>
 
@@ -113,8 +120,8 @@ Instead of starting containers manually, I used Docker Compose to manage both se
 * Created a `docker-compose` file for MySQL and phpMyAdmin  
 * Configured a named volume for persistent database storage  
 * Used environment variables for dynamic configuration  
-* Connected phpMyAdmin to MySQL using the service name (`mysql`) via `PMA_HOST`  
-
+* Connected phpMyAdmin to MySQL using the service name (`mysql`) via `PMA_HOST`
+  
 ### mysql-compose.yaml
 
 ```yaml
