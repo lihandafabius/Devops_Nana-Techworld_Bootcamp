@@ -182,10 +182,8 @@ ENTRYPOINT ["java", "-jar", "app.jar"]
 ### Steps:
 
 * Created a lightweight Docker image using a minimal base image (`alpine`)
-* Built the application JAR using Gradle
 * Copied the JAR into the container
 * Defined the entrypoint to run the application
-* Built and tested the container locally
 
 ### Key Concepts:
 
@@ -277,7 +275,7 @@ services:
     ports:
       - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: team-member-projects
       MYSQL_USER: ${DB_USER}
       MYSQL_PASSWORD: ${DB_PWD}
@@ -318,6 +316,7 @@ volumes:
   ```yaml
   DB_USER: ${DB_USER}
   DB_PWD: ${DB_PWD}
+  ...
   ```
 
 * Implemented MySQL health check to ensure proper startup order:
@@ -384,6 +383,7 @@ docker login localhost:8083
   ```bash
   DB_USER=...
   DB_PWD=...
+  ...
   ```
 
 * Secured the `.env` file with restricted permissions:
