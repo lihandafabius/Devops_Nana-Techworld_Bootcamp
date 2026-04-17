@@ -55,7 +55,25 @@ I used Docker to quickly spin up a mysql database container in my local machine.
   * `MYSQL_DATABASE`
   * `MYSQL_USER`
   * `MYSQL_PASSWORD`
+    
+  ```bash
+  
+  docker run -p 3306:3306 \
+  --name mysql \
+  -e MYSQL_ROOT_PASSWORD= ... \
+  -e MYSQL_DATABASE=... \
+  -e MYSQL_USER=... \
+  -e MYSQL_PASSWORD=... \
+  -d mysql
+  ```
 * Exposed port `3306`. I had another mysql instance locally, so I had to kill the instance with the Instance's process ID
+* Build the artifact
+
+  ```bash
+  ./gradlew clean
+  ./gradlew build
+  ```
+  
 * Verified database connectivity from the application by querying the database using mysql cli interface by use of `mysql -h 127.0.0.1 -p 3306 -u admin -p`
 
 </details>
