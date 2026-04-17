@@ -133,10 +133,10 @@ services:
     ports:
       - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: team-member-projects
-      MYSQL_USER: ${DB_USER}
-      MYSQL_PASSWORD: ${DB_PWD}
+      MYSQL_ROOT_PASSWORD: ...
+      MYSQL_DATABASE: ...
+      MYSQL_USER: ...
+      MYSQL_PASSWORD: ...
     volumes:
       - mysql-data:/var/lib/mysql
 
@@ -144,7 +144,7 @@ services:
     image: phpmyadmin
     container_name: phpmyadmin
     ports:
-      - "8084:80"
+      - "8083:80"
     restart: always
     environment:
       PMA_HOST: mysql
@@ -170,9 +170,9 @@ The Java application was containerized to run alongside MySQL and phpMyAdmin usi
 ```dockerfile
 FROM eclipse-temurin:17-jdk-alpine
 
-RUN mkdir -p /home/java-app
+RUN mkdir -p /opt/java-app
 
-WORKDIR /home/java-app 
+WORKDIR /opt/java-app 
 
 COPY build/libs/*.jar app.jar   
 
