@@ -55,8 +55,31 @@ I used Docker to quickly spin up a mysql database container in my local machine.
   * `MYSQL_DATABASE`
   * `MYSQL_USER`
   * `MYSQL_PASSWORD`
+
+    ```bash
+    docker run -p 3306:3306 \
+     --name mysql \
+     -e MYSQL_ROOT_PASSWORD= ... \
+     -e MYSQL_DATABASE=... \
+     -e MYSQL_USER=... \
+     -e MYSQL_PASSWORD=... \
+     -d mysql
+    ```
+    
 * Exposed port `3306`. I had another mysql instance locally, so I had to kill the instance with the Instance's process ID
-* Verified database connectivity from the application by querying the database using mysql cli interface by use of `mysql -h 127.0.0.1 -p 3306 -u admin -p`
+* Build the artifact
+
+  ```bash
+  ./gradlew clean
+  ./gradlew build
+  ```
+  
+* Run the artifact after setting the env variables
+  
+  ```bash
+  java -jar build/libs/docker-exercises-project-1.0-SNAPSHOT.jar
+  ```
+* Verified database connectivity from the application by querying the database using mysql cli interface by use of `mysql -h 127.0.0.1 -p 3306 -u admin -p` after editing from the application
 
 </details>
 
@@ -71,8 +94,15 @@ To visualize and manage MySQL database data, I deployed a UI tool as a Docker co
 ### Steps:
 
 * Started phpMyAdmin container using the official image  
-* Configured connection to MySQL using `PMA_HOST`, set to the MySQL service/container name (Docker internal DNS)  
-* Accessed via browser and successfully logged in using the database credentials defined in the MySQL container
+* Configured connection to MySQL using `PMA_HOST`, set to the MySQL service/container name (Docker internal DNS) in the same network
+  
+  ```bash
+  docker run --name phpmyadmin -d \
+  -e PMA_HOST=mysql \
+  -p 8080:80 phpmyadmin
+  ```
+   
+* Accessed via browser and successfully logged in using the database credentials defined in the MySQL container ```localhost:8083```
 
 </details>
 
@@ -90,8 +120,8 @@ Instead of starting containers manually, I used Docker Compose to manage both se
 * Created a `docker-compose` file for MySQL and phpMyAdmin  
 * Configured a named volume for persistent database storage  
 * Used environment variables for dynamic configuration  
-* Connected phpMyAdmin to MySQL using the service name (`mysql`) via `PMA_HOST`  
-
+* Connected phpMyAdmin to MySQL using the service name (`mysql`) via `PMA_HOST`
+  
 ### mysql-compose.yaml
 
 ```yaml
@@ -103,10 +133,10 @@ services:
     ports:
       - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: rootpass
-      MYSQL_DATABASE: team-member-projects
-      MYSQL_USER: ${DB_USER}
-      MYSQL_PASSWORD: ${DB_PWD}
+      MYSQL_ROOT_PASSWORD: ...
+      MYSQL_DATABASE: ...
+      MYSQL_USER: ...
+      MYSQL_PASSWORD: ...
     volumes:
       - mysql-data:/var/lib/mysql
 
@@ -114,7 +144,7 @@ services:
     image: phpmyadmin
     container_name: phpmyadmin
     ports:
-      - "8084:80"
+      - "8083:80"
     restart: always
     environment:
       PMA_HOST: mysql
@@ -140,9 +170,9 @@ The Java application was containerized to run alongside MySQL and phpMyAdmin usi
 ```dockerfile
 FROM eclipse-temurin:17-jdk-alpine
 
-RUN mkdir -p /home/java-app
+RUN mkdir -p /opt/java-app
 
-WORKDIR /home/java-app 
+WORKDIR /opt/java-app 
 
 COPY build/libs/*.jar app.jar   
 
@@ -152,10 +182,8 @@ ENTRYPOINT ["java", "-jar", "app.jar"]
 ### Steps:
 
 * Created a lightweight Docker image using a minimal base image (`alpine`)
-* Built the application JAR using Gradle
 * Copied the JAR into the container
 * Defined the entrypoint to run the application
-* Built and tested the container locally
 
 ### Key Concepts:
 
@@ -247,7 +275,7 @@ services:
     ports:
       - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: team-member-projects
       MYSQL_USER: ${DB_USER}
       MYSQL_PASSWORD: ${DB_PWD}
@@ -288,6 +316,7 @@ volumes:
   ```yaml
   DB_USER: ${DB_USER}
   DB_PWD: ${DB_PWD}
+  ...
   ```
 
 * Implemented MySQL health check to ensure proper startup order:
@@ -354,6 +383,7 @@ docker login localhost:8083
   ```bash
   DB_USER=...
   DB_PWD=...
+  ...
   ```
 
 * Secured the `.env` file with restricted permissions:
