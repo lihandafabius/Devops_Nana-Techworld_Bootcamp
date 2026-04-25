@@ -1,8 +1,8 @@
-def script
+def gv
 pipeline {
     agent any
     parameters {
-        choice(name: 'VERSION', defaultValue: '1.3.0', description: 'New version to deploy', choices: ['1.3.0', '1.4.0', '1.5.0'])
+        choice(name: 'VERSION', description: 'New version to deploy', choices: ['1.3.0', '1.4.0', '1.5.0'])
         booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Whether to run tests')
     }
     // environment {
@@ -14,14 +14,14 @@ pipeline {
         stage('init') {
             steps {
                 script {
-                    script = load 'script.groovy'
+                    gv   = load 'script.groovy'
                 }
             }
         }
         stage('Build') {
             steps {
                 script{
-                    script.buildApp()
+                    gv.buildApp()
                 }
             }
         }
@@ -33,14 +33,14 @@ pipeline {
             }
             steps {
                 script{
-                    script.testApp()
+                    gv.testApp()
                 }
             }
         }
         stage('Deploy') {
             steps {
                 script{
-                    script.deployApp()
+                    gv.deployApp()
                 }   
                // echo "deploying with ${SERVER_CREDENTIALS}"
             //    withCredentials([
