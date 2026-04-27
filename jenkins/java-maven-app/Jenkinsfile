@@ -9,8 +9,7 @@ pipeline {
             steps {
                 script {
                     echo 'Building the application...'
-                    sh cd jenkins/java-maven-app/
-                    sh 'mvn package'
+                    sh 'cd jenkins/java-maven-app/ && mvn package'
                 }
             }
         }
@@ -19,8 +18,7 @@ pipeline {
                 script {
                     echo 'Building the Docker image...'
                     withCredentials([usernamePassword(credentialsId: 'Docker hub login credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-                        sh cd jenkins/java-maven-app/
-                        sh 'docker build -t lihanda/demo-app:3.0 .'
+                        sh 'cd jenkins/java-maven-app/ && docker build -t lihanda/demo-app:3.0 .'
                         sh "echo $PASS | docker login -u $USER --password-stdin"
                         sh 'docker push lihanda/demo-app:3.0'
                     }
