@@ -1,53 +1,37 @@
-def gv
 pipeline {
     agent any
-    parameters {
-        choice(name: 'VERSION', description: 'New version to deploy', choices: ['1.3.0', '1.4.0', '1.5.0'])
-        booleanParam(name: 'RUN_TESTS', defaultValue: true, description: 'Whether to run tests')
+    tools {
+        maven 'maven-9'
     }
 
     stages {
-        stage('init') {
+        stage('Build jar') {
             steps {
                 script {
-                    gv   = load 'jenkins/java-maven-app/script.groovy'
+                    echo 'Building the application...'
+                    sh cd jenkins/java-maven-app/
+                    sh 'mvn package'
                 }
             }
         }
-        stage('Build') {
+        stage('Build docker image') {
             steps {
-                script{
-                    gv.buildApp()
-                }
-            }
-        }
-        stage('Test') {
-            when {
-                expression {               
-                    params.RUN_TESTS         
-                }
-            }
-            steps {
-                script{
-                    gv.testApp()
-                }
+                script {
+                    echo 'Building the Docker image...'
+                    withCredentials([usernamePassword(credentialsId: 'Docker hub login credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                        sh cd jenkins/java-maven-app/
+                        sh 'docker build -t lihanda/demo-app:3.0 .'
+                        sh "echo $PASS | docker login -u $USER --password-stdin"
+                        sh 'docker push lihanda/demo-app:3.0'
+                    }
             }
         }
         stage('Deploy') {
-            input{
-                message "Select the environment to deploy to"
-                ok "Done"
-                parameters{
-                    choice(name: 'ONE', description: 'Select environment to deploy', choices: ['dev', 'staging', 'prod'])
-                    choice(name: 'TWO', description: 'Select environment to deploy', choices: ['dev', 'staging', 'prod'])
-                }
-            }
             steps {
-                script{
-                    gv.deployApp()
-                    echo "Deploying to ${ONE}"
-                    echo "Deploying to ${TWO}"
-                }   
+                script {
+                    echo 'Deploying the application...'
+
+                }
             }
         }
     }
