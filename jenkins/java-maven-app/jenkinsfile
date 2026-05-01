@@ -25,10 +25,12 @@ pipeline {
                 }
             }
         }
-        stage('Build docker image') {
+        stage('Build and push docker image') {
             steps {
                 script {
-                    buildImage 'lihanda/demo-app:4.0'
+                    buildImage 'lihanda/demo-app:5.0'
+                    dockerLogin()
+                    dockerPush 'lihanda/demo-app:5.0'
                 }    
             }
         }
