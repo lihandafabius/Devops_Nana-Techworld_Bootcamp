@@ -14,7 +14,7 @@ pipeline {
             steps {
                 script {
                     echo 'Initializing the pipeline...'
-                    gv = load 'script.groovy'
+                    gv = load 'jenkins/java-maven-app/script.groovy'
                 }
             }
         }
