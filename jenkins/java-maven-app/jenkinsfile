@@ -6,6 +6,7 @@ pipeline {
                 script {
                     echo 'Testing the application...'
                     echo "Running tests on branch: ${BRANCH_NAME}"
+                    echo 'test successful'
                 }
             }
         }
@@ -18,6 +19,7 @@ pipeline {
             steps {
                 script {
                     echo 'Building the application...'
+                    echo 'test succesful'
                 }
             }
         }
