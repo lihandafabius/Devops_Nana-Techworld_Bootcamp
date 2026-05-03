@@ -34,7 +34,7 @@ pipeline {
                     withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                         sh "cd jenkins/java-maven-app/ && docker build -t lihanda/demo-app:${IMAGE_NAME} ."
                         sh "echo $PASS | docker login -u $USER --password-stdin"
-                        sh "docker push lihanda/demo-app:${IMAGE_NAME|"
+                        sh "docker push lihanda/demo-app:${IMAGE_NAME}"
                     }
                 }    
             }
