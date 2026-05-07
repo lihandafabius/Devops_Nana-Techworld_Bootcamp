@@ -1,0 +1,32 @@
+#!/usr/bin/env
+pipeline {
+    agent any
+    tools {
+        nodejs 'node'
+    }
+
+    stages {
+        stage('Increment app version') {
+            steps {
+             script {
+                echo 'Incrementing app version'
+                sh 'cd jenkins-exercises/app && npm version minor --no-git-tag-version'
+
+                def packagejson = readJSON file: 'jenkins-exercises/app/package.json'
+                def version = packageJSON.version
+
+                env.IMAGE_NAME = "${version}-${BUILD_NUMBER}"
+             }
+            }
+        }
+        stage('Test code') {
+            steps {
+                script {
+                    echo 'Running test'
+                }
+            }
+
+        }
+    }
+
+}
