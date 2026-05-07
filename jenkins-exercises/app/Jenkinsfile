@@ -12,8 +12,8 @@ pipeline {
                 echo 'Incrementing app version'
                 sh 'cd jenkins-exercises/app && npm version minor --no-git-tag-version'
 
-                def packagejson = readJSON file: 'jenkins-exercises/app/package.json'
-                def version = packageJSON.version
+                def packageJson = readJSON file: 'jenkins-exercises/app/package.json'
+                def version = packageJson.version
 
                 env.IMAGE_NAME = "${version}-${BUILD_NUMBER}"
              }
