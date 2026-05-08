@@ -60,12 +60,29 @@ pipeline {
 
                         sh "git remote set-url origin https://${USER}:${PASS}@github.com/lihandafabius/Devops_Nana-Techworld_Bootcamp.git"
                         sh 'git add .'
-                        sh 'git commit -m "ci: version bump"'
+                        sh 'git commit -m "ci: version bump [skip ci]"'
                         sh 'git push origin HEAD:main'
                     }
                 }
             }
         }
+        stage('Check commit message') {
+            steps {
+                script {
+
+                    def commitMessage = sh(
+                        script: "git log -1 --pretty=%B",
+                        returnStdout: true
+                    ).trim()
+
+                    if (commitMessage.contains('[skip ci]')) {
+                        currentBuild.result = 'NOT_BUILT'
+                        error('Skipping build triggered by Jenkins commit')
+                    }
+                }
+            }
+        }
+
     }
 
 }
