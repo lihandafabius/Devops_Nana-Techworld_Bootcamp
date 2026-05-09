@@ -40,7 +40,7 @@ pipeline {
         stage('Build docker image') {
             steps {
                 script {
-                    buildDockerImage()
+                    buildDockerImage 'lihanda/demo-app:${IMAGE_NAME}'
                 }
             }
         }
