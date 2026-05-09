@@ -54,19 +54,26 @@ pipeline {
         stage('Commit version update') {
             steps {
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-                        sh 'git config --global user.email "jenkins@example.com"'
-                        sh 'git config --global user.name "jenkins"'
 
+                    withCredentials([usernamePassword(
+                        credentialsId: 'github-credentials',
+                        usernameVariable: 'USER',
+                        passwordVariable: 'PASS'
+                    )]) {
 
-                        sh 'git status'
-                        sh 'git branch'
-                        sh 'git config --list'
+                        sh '''
+                            git config --global user.email "jenkins@example.com"
+                            git config --global user.name "jenkins"
 
-                        sh "git remote set-url origin https://${USER}:${PASS}@github.com/lihandafabius/Devops_Nana-Techworld_Bootcamp.git"
-                        sh 'git add .'
-                        sh 'git commit -m "ci: version bump [skip ci]"'
-                        sh 'git push origin HEAD:main'
+                            git remote set-url origin https://${USER}:${PASS}@github.com/lihandafabius/Devops_Nana-Techworld_Bootcamp.git
+
+                            git add .
+                            git commit -m "ci: version bump [skip ci]" || true
+
+                            git pull --rebase origin main
+
+                            git push origin HEAD:main
+                        '''
                     }
                 }
             }
