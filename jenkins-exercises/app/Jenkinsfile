@@ -18,15 +18,9 @@ pipeline {
         }
         stage('Increment app version') {
             steps {
-             script {
-                echo 'Incrementing app version'
-                sh 'cd jenkins-exercises/app && npm version minor --no-git-tag-version'
-
-                def packageJson = readJSON file: 'jenkins-exercises/app/package.json'
-                def version = packageJson.version
-
-                env.IMAGE_NAME = "${version}-${BUILD_NUMBER}"
-             }
+                script {
+                    incrementAppVersion()
+                }
             }
         }
         stage('Test code') {
@@ -54,27 +48,7 @@ pipeline {
         stage('Commit version update') {
             steps {
                 script {
-
-                    withCredentials([usernamePassword(
-                        credentialsId: 'github-credentials',
-                        usernameVariable: 'USER',
-                        passwordVariable: 'PASS'
-                    )]) {
-
-                        sh '''
-                            git config --global user.email "jenkins@example.com"
-                            git config --global user.name "jenkins"
-
-                            git remote set-url origin https://${USER}:${PASS}@github.com/lihandafabius/Devops_Nana-Techworld_Bootcamp.git
-
-                            git add .
-                            git commit -m "ci: version bump [skip ci]" || true
-
-                            git pull --rebase origin main
-
-                            git push origin HEAD:main
-                        '''
-                    }
+                    commitVersionUpdate()
                 }
             }
         }
