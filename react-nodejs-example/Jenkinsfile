@@ -1,0 +1,3 @@
+sshagent(['ec2-server-key']) {
+    // some block
+}
