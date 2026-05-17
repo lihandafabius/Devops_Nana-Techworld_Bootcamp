@@ -1,6 +1,6 @@
 services:
   java-maven-app:
-    image: ${IMAGE}
+    image: lihanda/demo-app:${IMAGE}
     ports:
       - 8081:8080
   postgres:
