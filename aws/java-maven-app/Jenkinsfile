@@ -53,8 +53,8 @@ pipeline {
                     def ec2Instance = "ubuntu@16.16.79.137"
 
                     sshagent(['ec2-server-key']) {
-                        sh 'scp aws/java-maven-app/server-cmds.sh ${ec2Instance}:/home/ubuntu'
-                        sh 'scp aws/java-maven-app/docker-compose.yaml ${ec2Instance}:/home/ubuntu'
+                        sh "scp aws/java-maven-app/server-cmds.sh ${ec2Instance}:/home/ubuntu"
+                        sh "scp aws/java-maven-app/docker-compose.yaml ${ec2Instance}:/home/ubuntu"
                         sh "ssh -o StrictHostKeyChecking=no ${ec2Instance} ${shellCmd}"
                     }
                 }
