@@ -1,6 +1,6 @@
 services:
   node-js-app:
-    image: ${IMAGE}
+    image: lihanda/demo-app:${IMAGE}
     ports:
       - 3000:3000
 
