@@ -3,7 +3,6 @@
 @Library('Jenkins-shared-library')
 
 def APP_PATH = "aws-exercises/app"
-def IMAGE_NAME =
 
 pipeline {
     agent any
