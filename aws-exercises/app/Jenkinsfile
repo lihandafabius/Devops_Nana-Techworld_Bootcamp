@@ -1,0 +1,61 @@
+#!/usr/bin/env
+
+@Library('Jenkins-shared-library')
+def APP_PATH = "aws-exercises/app"
+
+pipeline {
+    agent any
+    tools {
+        nodejs 'node'
+    }
+
+    stages {
+        stage('Check commit message') {
+            steps {
+                script {
+                    commitCheck()
+                }
+            }
+        }
+        stage('Increment app version') {
+            steps {
+                script {
+                    incrementAppVersion(APP_PATH)
+                }
+            }
+        }
+        stage('Test code') {
+            steps {
+                script {
+                    echo 'Running test'
+                    sh "cd ${APP_PATH} && npm install && npm run test"
+                }
+            }
+        }
+        stage('Build docker image') {
+            steps {
+                script {
+                    buildDockerImage(
+                        "lihanda/demo-app:${IMAGE_NAME}",
+                        APP_PATH
+                    )
+                }
+            }
+        }
+        stage('Deploy') {
+            steps {
+                script {
+                    echo 'Deploying the application ..'
+                }
+            }
+        }
+        stage('Commit version update') {
+            steps {
+                script {
+                    commitVersionUpdate()
+                }
+            }
+        }
+    }
+
+}
