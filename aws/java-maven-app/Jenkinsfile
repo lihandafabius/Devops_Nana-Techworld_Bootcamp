@@ -50,7 +50,7 @@ pipeline {
 
                     def shellCmd = "bash ./server-cmds.sh ${IMAGE_NAME}"
 
-                    def ec2Instance = "ubuntu@16.16.79.137"
+                    def ec2Instance = "ubuntu@#"
 
                     sshagent(['ec2-server-key']) {
                         sh "scp -o StrictHostKeyChecking=no aws/java-maven-app/server-cmds.sh ${ec2Instance}:/home/ubuntu"
