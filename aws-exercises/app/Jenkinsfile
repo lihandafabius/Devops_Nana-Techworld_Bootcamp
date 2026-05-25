@@ -30,10 +30,16 @@ pipeline {
                 script {
                     echo 'Running test'
                     sh "cd ${APP_PATH} && npm install && npm run test"
+                    echo "Executing pipeline for branch $BRANCH_NAME "
                 }
             }
         }
         stage('Build docker image') {
+            when {
+                expression {
+                    BRANCH_NAME == "master"
+                }
+            }
             steps {
                 script {
                     buildDockerImage(
@@ -44,6 +50,11 @@ pipeline {
             }
         }
         stage('Deploy') {
+            when {
+                expression {
+                    BRANCH_NAME == "master"
+                }
+            }
             steps {
                 script {
                     echo 'Deploying the application to EC2 instance..'
