@@ -67,7 +67,6 @@ pipeline {
                         sh "scp -o StrictHostKeyChecking=no ${APP_PATH}/server-cmds.sh ${ec2Instance}:/home/ec2-user"
                         sh "scp -o StrictHostKeyChecking=no ${APP_PATH}/docker-compose.yaml ${ec2Instance}:/home/ec2-user"
                         sh "ssh -o StrictHostKeyChecking=no ${ec2Instance} ${shellCmd}"
-
                     }
                 }
             }
