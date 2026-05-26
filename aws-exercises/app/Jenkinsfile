@@ -24,7 +24,7 @@ pipeline {
                     echo 'Running test'
                     sh "cd ${APP_PATH} && npm install && npm run test"
                     echo "Executing pipeline for branch $BRANCH_NAME "
-                }git
+                }
             }
         }
         stage('Build docker image') {
