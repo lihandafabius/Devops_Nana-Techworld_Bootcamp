@@ -159,7 +159,7 @@ A subnet divides the VPC network into smaller network segments where resources s
 aws ec2 create-internet-gateway
 ```
 
-![Internet Gateway](internet_gateway.png)
+![Internet Gateway](internet_geteway.png)
 
 An Internet Gateway allows resources inside the VPC to communicate with the internet.
 
