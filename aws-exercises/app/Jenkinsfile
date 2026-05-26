@@ -11,13 +11,6 @@ pipeline {
     }
     
     stages {
-        // stage('Check commit message') {
-        //     steps {
-        //         script {
-        //             commitCheck()
-        //         }
-        //     }
-        // }
         stage('Increment app version') {
             steps {
                 script {
