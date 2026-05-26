@@ -44,7 +44,7 @@ To securely interact with AWS services, a dedicated IAM user was created and con
   * `AmazonEC2FullAccess`
   * `AmazonVPCFullAccess`
 
-![IAM Group Policies](group_and_policies.png)
+![IAM Group Policies](group_policies.png)
 
 These permissions allowed management of:
   * EC2 instances
@@ -91,11 +91,12 @@ aws configure
   * Default region
   * Output format
     
-* Verified configuration using as seen above:
+* Verified configuration as seen above using and also from the console:
 
 ```bash
 aws sts get-caller-identity
 ```
+![Confirm user](confirm_username_login.png)
 
 </details>
 
@@ -105,7 +106,7 @@ aws sts get-caller-identity
 <summary>Exercise 3: Create VPC, Subnet & Security Group </summary>
 <br />
 
-Instead of deploying resources in the default AWS network, I created a dedicated Virtual Private Cloud (VPC) for the application infrastructure.
+Instead of deploying resources in the default AWS network, a dedicated Virtual Private Cloud (VPC) was created for the application infrastructure.
 
 ### Steps:
 
@@ -114,6 +115,8 @@ Instead of deploying resources in the default AWS network, I created a dedicated
 ```bash
 aws ec2 create-vpc --cidr-block 10.0.0.0/16
 ```
+
+![Create VPC](vpc.png)
 
 * Enabled DNS support and DNS hostnames
 
@@ -127,6 +130,15 @@ aws ec2 modify-vpc-attribute \
 --enable-dns-hostnames "{\"Value\":true}"
 ```
 
+![Enable DNS](dns.png)
+
+These settings were required to allow resources inside the VPC to resolve domain names and to automatically assign public DNS names to EC2 instances.
+
+* **DNS support** → Enables DNS resolution within the VPC so instances can resolve domain names to IP addresses
+* **DNS hostnames** → Automatically assigns public DNS hostnames to EC2 instances with public IP addresses, making them easier to access remotely
+
+---
+
 * Created a subnet inside the VPC
 
 ```bash
@@ -134,6 +146,80 @@ aws ec2 create-subnet \
 --vpc-id <vpc-id> \
 --cidr-block 10.0.1.0/24
 ```
+
+![Subnet](subnet.png)
+
+A subnet divides the VPC network into smaller network segments where resources such as EC2 instances can be deployed.
+
+---
+
+* Created an Internet Gateway
+
+```bash
+aws ec2 create-internet-gateway
+```
+
+![Internet Gateway](internet_gateway.png)
+
+An Internet Gateway allows resources inside the VPC to communicate with the internet.
+
+---
+
+* Attached the Internet Gateway to the VPC
+
+```bash
+aws ec2 attach-internet-gateway \
+--internet-gateway-id <igw-id> \
+--vpc-id <vpc-id>
+```
+
+![Attach IGW](attach_igw.png)
+
+This connects the VPC to the public internet.
+
+---
+
+* Created a route table
+
+```bash
+aws ec2 create-route-table \
+--vpc-id <vpc-id>
+```
+
+![Route table](route_table.png)
+
+A route table controls how network traffic is routed within the VPC and to external networks.
+
+---
+
+* Added a public internet route
+
+```bash
+aws ec2 create-route \
+--route-table-id <route-table-id> \
+--destination-cidr-block 0.0.0.0/0 \
+--gateway-id <igw-id>
+```
+
+![Add RT](internet_route.png)
+
+The route `0.0.0.0/0` directs all outbound internet traffic through the Internet Gateway.
+
+---
+
+* Associated the route table with the subnet
+
+```bash
+aws ec2 associate-route-table \
+--route-table-id <route-table-id> \
+--subnet-id <subnet-id>
+```
+
+![Attach RT](associate_subnet_rt.png)
+
+This made the subnet public by allowing instances inside it to access the internet.
+
+---
 
 * Created a security group
 
@@ -144,24 +230,25 @@ aws ec2 create-security-group \
 --vpc-id <vpc-id>
 ```
 
+![Create Security Group](sg.png)
+
+Security groups act as virtual firewalls controlling inbound and outbound traffic for EC2 instances.
+
+---
+
 * Added inbound rules:
   * Port `22` → SSH access
-  * Application port (`3000` / `8080`) → browser access
+    
+  ![Allow Port 22](open_ssh.png)
+  
+  * port `80` → HTTP access to allow  `apt update` etc
+  
+  ![Allow http](open_http.png)
 
-```bash
-aws ec2 authorize-security-group-ingress \
---group-id <sg-id> \
---protocol tcp \
---port 22 \
---cidr 0.0.0.0/0
-```
+  * Application port (`3000`) → browser access
 
-### Key Concepts:
+  ![Allow app browser access](node_port.png)
 
-* **VPC:** Isolated virtual network in AWS
-* **Subnet:** Logical subdivision inside the VPC
-* **Security Groups:** Virtual firewalls controlling inbound and outbound traffic
-* **DNS hostnames:** Required for public DNS resolution
 
 </details>
 
