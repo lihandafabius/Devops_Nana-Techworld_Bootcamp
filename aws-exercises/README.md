@@ -235,6 +235,12 @@ This made the subnet public by allowing instances inside it to access the intern
 
 ---
 
+* VPC Resource map
+
+![Resource Map](vpc_console.png)
+
+---
+
 * Created a security group
 
 ```bash
