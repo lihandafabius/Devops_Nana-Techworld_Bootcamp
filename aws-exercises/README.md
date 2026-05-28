@@ -757,12 +757,8 @@ instead of legacy:
 docker-compose
 ```
 
----
-
 ### 2. Jenkins Shared Library Path Reusability
 
 * **Issue:** Shared library functions contained hardcoded application paths
 
 * **Fix:** Refactored shared library functions to accept reusable parameters:
-
----
