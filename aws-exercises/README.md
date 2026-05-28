@@ -299,7 +299,7 @@ aws ec2 create-key-pair \
 ```bash
 aws ec2 run-instances \
 --image-id <ami-id> \
---instance-type t2.micro \
+--instance-type t3.micro \
 --key-name aws-server-key \
 --security-group-ids <sg-id> \
 --subnet-id <subnet-id>
