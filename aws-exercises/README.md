@@ -235,6 +235,12 @@ This made the subnet public by allowing instances inside it to access the intern
 
 ---
 
+* VPC Resource map
+
+![Resource Map](vpc_console.png)
+
+---
+
 * Created a security group
 
 ```bash
@@ -293,7 +299,7 @@ aws ec2 create-key-pair \
 ```bash
 aws ec2 run-instances \
 --image-id <ami-id> \
---instance-type t2.micro \
+--instance-type t3.micro \
 --key-name aws-server-key \
 --security-group-ids <sg-id> \
 --subnet-id <subnet-id>
@@ -727,7 +733,7 @@ This allows Jenkins to automatically:
 
 ---
 
-# ⚠️ Challenges & Fixes
+## Challenges & Fixes
 
 ### 1. Docker Compose Command Issues
 
@@ -751,12 +757,8 @@ instead of legacy:
 docker-compose
 ```
 
----
-
-### 3. Jenkins Shared Library Path Reusability
+### 2. Jenkins Shared Library Path Reusability
 
 * **Issue:** Shared library functions contained hardcoded application paths
 
 * **Fix:** Refactored shared library functions to accept reusable parameters:
-
----
