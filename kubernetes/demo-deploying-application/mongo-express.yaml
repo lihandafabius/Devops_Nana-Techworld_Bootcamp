@@ -50,4 +50,4 @@ spec:
   - protocol: TCP
     port: 8081
     targetPort: 8081
-    nodePort: 30000
+    nodePort: 30000 # This is the port on which the service will be exposed on the node. You can choose any port in the range 30000-32767. port to be accessed on the node. You can choose any port in the range 30000-32767. Make sure to update this if you have other services using node ports to avoid conflicts. This is the port to be accessed from the browser or any external client. You can choose any port in the range 30000-32767. Make sure to update this if you have other services using node ports to avoid conflicts.   
