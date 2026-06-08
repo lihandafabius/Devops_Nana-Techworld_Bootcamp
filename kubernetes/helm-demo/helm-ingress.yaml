@@ -3,10 +3,9 @@ kind: Ingress
 metadata:
     name: mongo-express
 spec:
-  ingressClassName: nginx-ingress
+  ingressClassName: nginx
   rules:
-  - host: YOUR_HOST_DNS_NAME
-    http:
+   - http:
       paths:
         - path: /
           pathType: Prefix
