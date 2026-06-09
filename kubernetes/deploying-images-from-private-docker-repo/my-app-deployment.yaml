@@ -18,7 +18,7 @@ spec:
       - name: my-registry-key
       containers:
       - name: my-app
-        image: 480007295919.dkr.ecr.eu-north-1.amazonaws.com/my-app:1.0
+        image: image-name:tag
         imagePullPolicy: Always
         ports:
         - containerPort: 3000
