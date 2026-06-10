@@ -20,21 +20,21 @@ spec:
         env:
         - name: PORT
           value: "8080"
-        # livenessProbe:
-        #   grpc:
-        #     port: 8080
-        #   periodSeconds: 5
-        # readinessProbe:
-        #   grpc:
-        #     port: 8080
-        #   periodSeconds: 5
-        # resources:
-        #   requests: 
-        #     cpu: 100m
-        #     memory: 64Mi
-        #   limits:
-        #     cpu: 200m
-        #     memory: 128Mi
+        livenessProbe:
+          grpc:  # protocol used for health checks, in this case gRPC but it can be HTTP or TCP
+            port: 8080
+          periodSeconds: 5 # how often to perform the health check of the container application
+        readinessProbe: # used to determine if the container is ready to accept traffic. If the readiness probe fails, the container will be removed from the service endpoints and will not receive traffic until it becomes ready again.
+          grpc:
+            port: 8080
+          periodSeconds: 5
+        resources: # used to specify the resource requirements for abuggy container, including CPU and memory limits and requests. This can help ensure that the container has enough resources to run properly and can prevent it from consuming too many resources on the cluster.
+          requests: # used to specify the minimum amount of resources that a container needs to run. If the container does not have enough resources to meet these requests, it may be scheduled on a different node or may not be scheduled at all.  
+            cpu: 100m
+            memory: 64Mi
+          limits: # used to specify the maximum amount of resources that a container can use. If the container exceeds these limits, it may be terminated or throttled by the Kubernetes scheduler.
+            cpu: 200m
+            memory: 128Mi
 ---
 apiVersion: v1
 kind: Service
@@ -76,14 +76,14 @@ spec:
           value: "productcatalogservice:3550"
         - name: DISABLE_PROFILER
           value: "1"
-        # livenessProbe:
-        #   grpc:
-        #     port: 8080
-        #   periodSeconds: 5
-        # readinessProbe:
-        #   grpc:
-        #     port: 8080
-        #   periodSeconds: 5
+        livenessProbe:
+          grpc:
+            port: 8080
+          periodSeconds: 5
+        readinessProbe: # used to determine if the container is ready to accept traffic. If the readiness probe fails, the container will be removed from the service endpoints and will not receive traffic until it becomes ready again.
+          grpc:
+            port: 8080
+          periodSeconds: 5
 
 ---
 apiVersion: v1
@@ -122,16 +122,16 @@ spec:
         env:
         - name: PORT
           value: "3550"
-        # - name: DISABLE_PROFILER
-        #   value: "1"
-        # livenessProbe:
-        #   grpc:
-        #     port: 3550
-        #   periodSeconds: 5
-        # readinessProbe:
-        #   grpc:
-        #     port: 3550
-        #   periodSeconds: 5
+        - name: DISABLE_PROFILER #used to disable the profiler in the application, which is used for performance monitoring and debugging. Setting this variable to "1" typically indicates that the profiler should be disabled, which can help reduce resource usage and improve performance in production environments.
+          value: "1"
+        livenessProbe:
+          grpc:
+            port: 3550
+          periodSeconds: 5
+        readinessProbe:
+          grpc:
+            port: 3550
+          periodSeconds: 5
 
 ---
 apiVersion: v1
@@ -172,14 +172,14 @@ spec:
           value: "50051"
         - name: DISABLE_PROFILER
           value: "1"
-#         livenessProbe:
-#           grpc:
-#             port: 50051
-#           periodSeconds: 5
-#         readinessProbe:
-#           grpc:
-#             port: 50051
-#           periodSeconds: 5
+        livenessProbe:
+          grpc:
+            port: 50051
+          periodSeconds: 5
+        readinessProbe:
+          grpc:
+            port: 50051
+          periodSeconds: 5
 ---
 apiVersion: v1
 kind: Service
@@ -219,14 +219,14 @@ spec:
           value: "7000"
         - name: DISABLE_PROFILER
           value: "1"
-        # livenessProbe:
-        #   grpc:
-        #     port: 7000
-        #   periodSeconds: 5
-        # readinessProbe:
-        #   grpc:
-        #     port: 7000
-        #   periodSeconds: 5
+        livenessProbe:
+          grpc:
+            port: 7000
+          periodSeconds: 5
+        readinessProbe:
+          grpc:
+            port: 7000
+          periodSeconds: 5
 
 ---
 apiVersion: v1
@@ -265,14 +265,14 @@ spec:
         env:
         - name: PORT
           value: "50051"
-        # livenessProbe:
-        #   grpc:
-        #     port: 50051
-        #   periodSeconds: 5
-        # readinessProbe:
-        #   grpc:
-        #     port: 50051
-        #   periodSeconds: 5
+        livenessProbe:
+          grpc:
+            port: 50051
+          periodSeconds: 5
+        readinessProbe:
+          grpc:
+            port: 50051
+          periodSeconds: 5
 ---
 apiVersion: v1
 kind: Service
@@ -310,21 +310,21 @@ spec:
         env:
         - name: PORT
           value: "9555"
-        # livenessProbe:
-        #   grpc:
-        #     port: 9555
-        #   periodSeconds: 5
-        # readinessProbe:
-        #   grpc:
-        #     port: 9555
-        #   periodSeconds: 5
-        # resources:
-        #   requests: 
-        #     cpu: 200m
-        #     memory: 180Mi
-        #   limits:
-        #     cpu: 300m
-        #     memory: 300Mi
+        livenessProbe:
+          grpc:
+            port: 9555
+          periodSeconds: 5
+        readinessProbe:
+          grpc:
+            port: 9555
+          periodSeconds: 5
+        resources:
+          requests: 
+            cpu: 200m
+            memory: 180Mi
+          limits:
+            cpu: 300m
+            memory: 300Mi
 
 ---
 apiVersion: v1
@@ -365,16 +365,16 @@ spec:
           value: "7070"
         - name: REDIS_ADDR
           value: "redis-cart:6379"
-        # - name: DISABLE_PROFILER
-        #   value: "1"
-        # livenessProbe:
-        #   grpc:
-        #     port: 7070
-        #   periodSeconds: 5
-        # readinessProbe:
-        #   grpc:
-        #     port: 7070
-        #   periodSeconds: 5
+        - name: DISABLE_PROFILER
+          value: "1"
+        livenessProbe:
+          grpc:
+            port: 7070
+          periodSeconds: 5
+        readinessProbe:
+          grpc:
+            port: 7070
+          periodSeconds: 5
 
 ---
 apiVersion: v1
@@ -410,23 +410,23 @@ spec:
         image: redis:alpine
         ports:
         - containerPort: 6379
-      #   livenessProbe:
-      #     initialDelaySeconds: 5
-      #     tcpSocket:
-      #       port: 6379
-      #     periodSeconds: 5
-      #   readinessProbe:
-      #     initialDelaySeconds: 5
-      #     tcpSocket:
-      #       port: 6379
-      #     periodSeconds: 5
-      #   resources:
-      #     requests: 
-      #       cpu: 70m
-      #       memory: 200Mi
-      #     limits:
-      #       cpu: 125m
-      #       memory: 300Mi
+        livenessProbe:
+          initialDelaySeconds: 5
+          tcpSocket: # protocol used for health checks, in this case TCP but it can be HTTP or gRPC
+            port: 6379
+          periodSeconds: 5
+        readinessProbe:
+          initialDelaySeconds: 5 # if the container application needs some time to start up before it can respond to health checks, you can use the initialDelaySeconds field to specify a delay before the first health check is performed. This can help prevent false negatives during startup.
+          tcpSocket:
+            port: 6379
+          periodSeconds: 5
+        resources:
+          requests: 
+            cpu: 70m
+            memory: 200Mi
+          limits:
+            cpu: 125m
+            memory: 300Mi
         volumeMounts:
         - name: redis-data
           mountPath: /data
@@ -482,14 +482,14 @@ spec:
           value: "currencyservice:7000"
         - name: CART_SERVICE_ADDR
           value: "cartservice:7070"
-        # livenessProbe:
-        #   grpc:
-        #     port: 5050
-        #   periodSeconds: 5
-        # readinessProbe:
-        #   grpc:
-        #     port: 5050
-        #   periodSeconds: 5
+        livenessProbe:
+          grpc:
+            port: 5050
+          periodSeconds: 5
+        readinessProbe:
+          grpc:
+            port: 5050
+          periodSeconds: 5
       
 ---
 apiVersion: v1
@@ -542,16 +542,16 @@ spec:
           value: "checkoutservice:5050"
         - name: AD_SERVICE_ADDR
           value: "adservice:9555"
-        # livenessProbe:
-        #   httpGet:
-        #     path: "/_healthz"
-        #     port: 8080
-        #   periodSeconds: 5
-        # readinessProbe:
-        #   httpGet:
-        #     path: "/_healthz"
-        #     port: 8080
-        #   periodSeconds: 5
+        livenessProbe:
+          httpGet: # protocol used for health checks, in this case HTTP but it can be TCP or gRPC. 
+            path: "/_healthz" # the path to the health check endpoint in the container application. This is typically an HTTP endpoint that returns a status code indicating whether the application is healthy or not.
+            port: 8080
+          periodSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: "/_healthz"
+            port: 8080
+          periodSeconds: 5
 
 ---
 apiVersion: v1
@@ -559,11 +559,10 @@ kind: Service
 metadata:
   name: frontend
 spec:
-  type: NodePort
+  type: LoadBalancer
   selector:
     app: frontend
   ports:
   - protocol: TCP
     port: 80
     targetPort: 8080
-    nodePort: 30007
