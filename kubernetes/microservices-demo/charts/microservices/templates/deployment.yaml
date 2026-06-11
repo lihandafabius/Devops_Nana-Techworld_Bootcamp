@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.appName }}
+spec:
+  replicas: {{ .Values.appReplicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.appName }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.appName }}
+    spec:
+      containers:
+      - name: {{ .Values.appName }}
+        image: "{{ .Values.appImage }}:{{ .Values.appVersion }}" # use "" when using multiple variables in the image name
+        ports:
+        - containerPort: {{ .Values.containerPort }}
+        env:
+        {{- range .Values.containerEnvVars }}
+        - name: {{ .name }}
+          value: {{ .value | quote }} # use quote to ensure the value is treated as a string, especially if it contains special characters. The pipe is used to chain together template commnds, in this case to apply the quote function to the value.
+        {{- end }}
+
+
+
