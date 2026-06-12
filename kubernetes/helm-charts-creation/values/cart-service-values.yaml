@@ -1,10 +1,14 @@
-appName: emailservice
-appImage: gcr.io/google-samples/microservices-demo/emailservice
+appName: cartservice
+appImage: gcr.io/google-samples/microservices-demo/cartservice
 appVersion: v0.8.0
 appReplicas: 2
-containerPort: 8080
+containerPort: 7070
 containerEnvVars:
 - name: PORT
-  value: "8080"
+  value: "7070"
+- name: REDIS_ADDR
+  value: "redis-cart:6379"
+- name: DISABLE_PROFILER
+  value: "1"
 
-servicePort: 5000
+servicePort: 7070

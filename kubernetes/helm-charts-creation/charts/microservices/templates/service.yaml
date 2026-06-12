@@ -2,8 +2,15 @@ apiVersion: v1
 kind: Service
 metadata:
   name: {{ .Values.appName }}
+  {{- if .Values.serviceAnnotations }}
+  annotations:
+    {{- toYaml .Values.serviceAnnotations | nindent 4 }}
+  {{- end }}
 spec:
   type: {{ .Values.serviceType }}
+  {{- if .Values.loadBalancerClass }}
+  loadBalancerClass: {{ .Values.loadBalancerClass }}
+  {{- end }}
   selector:
     app: {{ .Values.appName }}
   ports:
