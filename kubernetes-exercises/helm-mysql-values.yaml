@@ -1,8 +1,12 @@
 architecture: replication
+primary:
+  persistence:
+    storageClass: "auto-ebs" # custom storage class for the primary mysql instance.
 secondary:
   replicaCount: 2
-persistence:
-  storageClass: "gp2"
+  persistence:
+    storageClass: "auto-ebs" # custom storage class for the secondary mysql instances.
+
 auth:
   username: myuser 
   password: "mypassword"
