@@ -1,0 +1,21 @@
+architecture: replication
+secondary:
+  replicaCount: 2
+persistence:
+  storageClass: "gp2"
+auth:
+  username: myuser 
+  password: "mypassword"
+  rootPassword: "rootpassword"
+  replicationUser: replicator # replication user for the secondary mysql instances.
+  replicationPassword: "replica123"
+
+global:
+  security:
+    allowInsecureImages: True
+image:
+  registry: docker.io
+  tag: latest # in prod, pin a specific version to avoid unexpected upgrades
+  repository: bitnamilegacy/mysql 
+
+
