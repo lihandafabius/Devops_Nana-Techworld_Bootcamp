@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config
+data:
+  DB_SERVER: "mysql-primary"
+  DB_NAME: "my_database"

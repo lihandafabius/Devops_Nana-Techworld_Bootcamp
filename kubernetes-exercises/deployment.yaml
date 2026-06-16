@@ -1,24 +1,52 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: java-app
+  name: java-mysql-app
   labels:
-    app: java-app
+    app: java-mysql-app
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: java-app
+      app: java-mysql-app
   template:
     metadata:
       labels:
-        app: java-app
+        app: java-mysql-app
     spec:
       imagePullSecrets:
       - name: my-registry-key
       containers:
-      - name: java-app
-        image: IMAGE_NAME_HERE
+      - name: java-mysql-app
+        image: lihanda/demo-app:java-app-1.0
         imagePullPolicy: Always
+
         ports:
-        - containerPort: 3000
+        - containerPort: 8080
+
+        env:
+        - name: DB_SERVER
+          valueFrom:
+            configMapKeyRef:
+              name: mysql-config
+              key: DB_SERVER
+
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: mysql-config
+              key: DB_NAME
+
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: DB_USER
+
+        - name: DB_PWD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: DB_PWD
+
+        
