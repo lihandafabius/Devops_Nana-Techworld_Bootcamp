@@ -49,4 +49,18 @@ spec:
               name: mysql-secret
               key: DB_PWD
 
-        
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-mysql-app-service
+spec:
+  selector:
+    app: java-mysql-app
+
+  ports:
+  - port: 8080
+    targetPort: 8080
+
+  type: LoadBalancer
