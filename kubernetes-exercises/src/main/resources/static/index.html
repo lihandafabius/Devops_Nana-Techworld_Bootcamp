@@ -45,10 +45,10 @@
 <script>
   // HOST must be the server IP or DNS name when app running on a server
   // and localhost when running locally
-  const HOST = "my-java-app.com";
+  const HOST = "k8s-default-nginxing-53fdf512a8-be30515bec2a1dc2.elb.eu-north-1.amazonaws.com";
   
   (async function init() {
-    const response = await fetch(`http://${HOST}:80/get-data`);
+    const response = await fetch(`http://${HOST}/get-data`);
     console.log("response", response);
     const data = await response.json();
     console.log("stringified data: " + JSON.stringify(data));
@@ -116,7 +116,7 @@
       });
     });
 
-    const response = await fetch(`http://${HOST}:80/update-roles`, {
+    const response = await fetch(`http://${HOST}update-roles`, {
       method: "POST",
       headers: {
         'Accept': 'application/json',
