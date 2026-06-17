@@ -23,7 +23,7 @@ spec:
 
         env:
         - name: PMA_HOST
-          value: mysql-primary
+          value: mysql-primary # specify the mysql primary host to reach, in mongodb, you would use headless service to connect to the primary node.
 
         - name: PMA_PORT
           value: "3306"
