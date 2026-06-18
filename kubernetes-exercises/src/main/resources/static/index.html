@@ -45,7 +45,7 @@
 <script>
   // HOST must be the server IP or DNS name when app running on a server
   // and localhost when running locally
-  const HOST = "k8s-default-nginxing-148e05d200-d54eb0c560e55872.elb.eu-north-1.amazonaws.com ";
+  const HOST = "k8s-default-nginxing-148e05d200-d54eb0c560e55872.elb.eu-north-1.amazonaws.com";
   
   (async function init() {
     const response = await fetch(`http://${HOST}/get-data`);
@@ -116,7 +116,7 @@
       });
     });
 
-    const response = await fetch(`http://${HOST}update-roles`, {
+    const response = await fetch(`http://${HOST}/update-roles`, {
       method: "POST",
       headers: {
         'Accept': 'application/json',

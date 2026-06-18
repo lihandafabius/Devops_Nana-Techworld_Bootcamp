@@ -5,7 +5,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-   - host: k8s-default-nginxing-53fdf512a8-be30515bec2a1dc2.elb.eu-north-1.amazonaws.com
+   - host: k8s-default-nginxing-148e05d200-d54eb0c560e55872.elb.eu-north-1.amazonaws.com
      http:
       paths:
         - path: /
