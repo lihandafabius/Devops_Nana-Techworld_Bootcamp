@@ -1,481 +1,985 @@
-#### This project is for the DevOps bootcamp exercise for
+# ☸️ Container Orchestration with Kubernetes on AWS EKS
 
-#### "Build Automation with Jenkins"
+This project demonstrates how to migrate a traditional Docker Compose application to Kubernetes in order to achieve high availability, scalability, self-healing, and easier application management.
 
-##### Test
-The project uses jest library for tests. (see "test" script in package.json)
-There is 1 test (server.test.js) in the project that checks whether the main index.html file exists in the project. 
+The original application consisted of:
 
-To run the nodejs test:
+* Java Spring Boot application
+* MySQL database
+* phpMyAdmin
 
-    npm run test
+Originally all services were running on a single server using Docker Compose. Any container failure required manual intervention, causing downtime for users.
 
-Make sure to download jest library before running test, otherwise jest command defined in package.json won't be found.
+To improve reliability and availability, the application was migrated to Amazon EKS (Elastic Kubernetes Service) and deployed using Kubernetes resources and Helm charts.
 
-    npm install
+The project covers:
 
-In order to see failing test, remove index.html or rename it and run tests.
+* Creating an AWS EKS cluster
+* Deploying MySQL with replication using Helm
+* Configuring persistent storage with EBS volumes
+* Deploying a Java application with multiple replicas
+* Managing configuration using ConfigMaps and Secrets
+* Deploying phpMyAdmin
+* Installing NGINX Ingress Controller
+* Configuring Ingress routing
+* Using port-forwarding for internal services
+* Creating reusable Helm charts
+* Packaging Kubernetes manifests for application deployment
 
+---
 
-# **DOCUMENTATION**
+## Architecture
 
-# 🚀 CI/CD Automation with Jenkins
+```text
+                           Internet
+                               |
+                               |
+                    AWS Load Balancer (ELB)
+                               |
+                               |
+                    NGINX Ingress Controller
+                               |
+                               |
+                          Ingress Rule
+                               |
+                               |
+                    java-mysql-app-service
+                               |
+              --------------------------------
+              |                              |
+              |                              |
+      Java Application Pod          Java Application Pod
+            Replica 1                     Replica 2
+              |                              |
+              --------------------------------
+                               |
+                               |
+                     mysql-primary Service
+                               |
+                               |
+                         MySQL Primary
+                               |
+                    -------------------
+                    |                 |
+                    |                 |
+             MySQL Replica 1   MySQL Replica 2
 
-This project demonstrates how to build a complete CI/CD pipeline for a NodeJS application using Jenkins.
-
-The pipeline automates:
-
-* application versioning
-* testing
-* Docker image creation
-* image publishing to Docker Hub
-* Git operations
-* deployment workflows
-
-Additionally, the project introduces Jenkins Shared Libraries to make pipeline logic reusable across multiple projects, simulating real-world DevOps engineering practices.
-
-The exercises cover:
-
-* Dockerizing a NodeJS application
-* Building Jenkins pipelines
-* Automating version management
-* Running automated tests
-* Building & pushing Docker images
-* GitHub webhook integration
-* Avoiding CI/CD trigger loops
-* Deploying updated containers
-* Creating reusable Jenkins Shared Libraries
+```
 
 ---
 
 <details>
-<summary>Exercise 1: Dockerize the NodeJS Application</summary>
+<summary>Exercise 1: Create Kubernetes Cluster</summary>
 
 <br />
 
-The NodeJS application was containerized to ensure consistent execution across environments and simplify deployment.
+An Amazon EKS cluster was created to host the application workloads.
 
-### Dockerfile
+Unlike a traditional Docker Compose deployment running on a single VM, Kubernetes provides automated scheduling, self-healing, scaling and workload distribution across multiple nodes.
 
-```dockerfile
+### Create Cluster
 
-FROM node:18-alpine
+The cluster was provisioned on AWS EKS.
 
-WORKDIR /app
-
-COPY package*.json ./
-RUN npm install
-
-COPY . .
-
-# change ownership to node user
-RUN chown -R node:node /app
-
-# switch to non-root user
-USER node
-
-EXPOSE 3000
-
-CMD ["node", "server.js"]
-
-```
-
-### Key Concepts:
-
-* **Docker layer caching optimization:**`package.json` and `package-lock.json` are copied separately before the rest of the application source code. This allows Docker to cache the dependency installation layer and avoid reinstalling dependencies every time application code changes, significantly speeding up rebuilds.
-* **Lightweight base image:** Used the Alpine variant of Node.js to reduce image size and minimize the container attack surface.
-* **Non-root container execution:** The application runs using the built-in `node` user instead of the root user, following container security best practices and reducing potential security risks.
-
-After building the Docker image, the container was run locally to verify that the application started successfully and was accessible through the exposed port.
-
-![NodeJS Docker Application](nodejs-docker-app.png)
-
-</details>
-
----
-
-<details>
-<summary>Exercise 2: Create a Full CI/CD Pipeline for the NodeJS Application</summary>
-
-<br />
-
-A complete Jenkins pipeline was created to automate the application's build and release workflow.
-
-### Jenkinsfile
-
-```groovy
-pipeline {
-    agent any
-
-    tools {
-        nodejs 'node'
-    }
-
-    stages {
-
-        stage('Check commit message') {
-            steps {
-                script {
-
-                    def commitMessage = sh(
-                        script: "git log -1 --pretty=%B",
-                        returnStdout: true
-                    ).trim()
-
-                    if (commitMessage.contains('[skip ci]')) {
-                        currentBuild.result = 'NOT_BUILT'
-                        error('Skipping build triggered by Jenkins commit')
-                    }
-                }
-            }
-        }
-
-        stage('Increment app version') {
-            steps {
-                script {
-
-                    dir("jenkins-exercises/app") {
-
-                        echo 'Incrementing app version'
-
-                        sh 'npm version minor --no-git-tag-version'
-
-                        def packageJson = readJSON file: 'package.json'
-                        def version = packageJson.version
-
-                        env.IMAGE_NAME = "${version}-${BUILD_NUMBER}"
-                    }
-                }
-            }
-        }
-
-        stage('Test code') {
-            steps {
-                script {
-
-                    echo 'Running tests'
-
-                    sh 'cd jenkins-exercises/app && npm install && npm run test'
-                }
-            }
-        }
-
-        stage('Build docker image') {
-            steps {
-                script {
-
-                    echo 'Building docker image'
-
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: 'docker-hub-credentials',
-                            usernameVariable: 'USER',
-                            passwordVariable: 'PASS'
-                        )
-                    ]) {
-
-                        sh "cd jenkins-exercises/app && docker build -t lihanda/demo-app:${IMAGE_NAME} ."
-
-                        sh "echo $PASS | docker login -u $USER --password-stdin"
-
-                        sh "docker push lihanda/demo-app:${IMAGE_NAME}"
-                    }
-                }
-            }
-        }
-
-        stage('Deploy') {
-            steps {
-                script {
-                    echo 'Deploying application ...'
-                }
-            }
-        }
-
-        stage('Commit version update') {
-            steps {
-                script {
-
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: 'github-credentials',
-                            usernameVariable: 'USER',
-                            passwordVariable: 'PASS'
-                        )
-                    ]) {
-
-                        sh 'git config --global user.email "jenkins@example.com"'
-                        sh 'git config --global user.name "jenkins"'
-
-                        sh "git remote set-url origin https://${USER}:${PASS}@github.com/lihandafabius/Devops_Nana-Techworld_Bootcamp.git"
-
-                        sh 'git add .'
-
-                        sh 'git commit -m "ci: version bump [skip ci]"'
-
-                        sh 'git push origin HEAD:main'
-                    }
-                }
-            }
-        }
-    }
-}
-```
-
-### Increment Version
-
-The application version was automatically incremented using npm:
+### Verify Cluster
 
 ```bash
-npm version minor --no-git-tag-version
+kubectl get nodes
 ```
 
-The `--no-git-tag-version` flag prevents npm from automatically creating Git tags or commits.
-
-### Run Automated Tests
-
-Tests were executed before building the image to ensure only working code gets deployed.
+Example:
 
 ```bash
-npm install && npm run test
+NAME                                          STATUS   ROLES    AGE
+ip-192-168-xx-xx.eu-north-1.compute.internal  Ready    <none>   2h
+ip-192-168-xx-xx.eu-north-1.compute.internal  Ready    <none>   2h
 ```
 
-If tests fail:
+### Key Concepts
 
-* the pipeline aborts
-* no Docker image is built
-* no deployment occurs
+#### Control Plane
 
-### Build & Push Docker Image
+Managed by AWS EKS and responsible for:
 
-The pipeline automatically:
+* API Server
+* Scheduler
+* Controller Manager
+* etcd
 
-* builds the Docker image
-* tags it using the application version and Jenkins build number
-* pushes it to Docker Hub
+#### Worker Nodes
 
-Example image tag:
+Responsible for running application workloads.
 
-```bash
-lihanda/demo-app:1.4.0-32
-```
+#### Self-Healing
 
-### Git Integration
+If a pod crashes, Kubernetes automatically recreates it.
 
-After incrementing the application version:
+#### Scheduling
 
-* Jenkins commits the updated `package.json`
-* pushes the changes back to GitHub
-
-### Preventing Infinite Webhook Loops
-
-Since Jenkins pushes commits back to GitHub, GitHub webhooks can continuously retrigger the pipeline as shown below.
-
-![Webhook loop](webhooksj.png)
-
-To avoid this:
-
-* Jenkins commits include `[skip ci]`
-* the pipeline checks the latest commit message before continuing
-
-### Commit Check Logic
-
-```groovy
-def commitMessage = sh(
-    script: "git log -1 --pretty=%B",
-    returnStdout: true
-).trim()
-
-if (commitMessage.contains('[skip ci]')) {
-    currentBuild.result = 'NOT_BUILT'
-    error('Skipping build triggered by Jenkins commit')
-}
-```
-
-> Note: In Multibranch Pipelines, this problem can also be handled more cleanly using plugins such as **Ignore Committer Strategy**, which prevents builds triggered by commits from specific users (e.g., the Jenkins service account).
+Pods are automatically distributed across available nodes.
 
 </details>
 
 ---
 
 <details>
-<summary>Exercise 3: Manually Deploy Updated Docker Image on Remote Server</summary>
+<summary>Exercise 2: Deploy MySQL with Replication</summary>
 
 <br />
 
-After the Jenkins pipeline successfully pushed the updated Docker image to Docker Hub, the application was manually updated on the remote server.
+To eliminate the database as a single point of failure, MySQL was deployed using the Bitnami Helm Chart with replication enabled.
 
-### Steps:
+### Create StorageClass
 
-* Logged into the remote server
-* Pulled the latest Docker image
-* Started a new container using the updated image
+Persistent storage was provisioned dynamically using AWS EBS CSI Driver.
 
-![Container running](dockerj.png)
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
 
-* Accessed the application from the browser.
+metadata:
+  name: auto-ebs
 
-![Browser container running](browser.png)
+provisioner: ebs.csi.eks.amazonaws.com
 
+volumeBindingMode: WaitForFirstConsumer
+
+parameters:
+  type: gp3
+
+allowVolumeExpansion: true
+```
+
+### MySQL Helm Values
+
+```yaml
+architecture: replication
+
+primary:
+  persistence:
+    storageClass: auto-ebs
+
+secondary:
+  replicaCount: 2
+
+  persistence:
+    storageClass: auto-ebs
+
+auth:
+  username: myuser
+  password: mypassword
+  rootPassword: rootpassword
+
+  replicationUser: replicator
+  replicationPassword: replica123
+
+global:
+  security:
+    allowInsecureImages: true
+
+image:
+  registry: docker.io
+  repository: bitnamilegacy/mysql
+  tag: latest
+```
+
+### Install MySQL
+
+```bash
+helm repo add bitnami https://charts.bitnami.com/bitnami
+
+helm install mysql bitnami/mysql \
+-f mysql-values.yaml
+```
+
+### Verify Deployment
+
+```bash
+kubectl get pods
+```
+
+Example:
+
+```bash
+mysql-primary-0
+mysql-secondary-0
+mysql-secondary-1
+```
+
+### Key Concepts
+
+#### StatefulSet
+
+MySQL is deployed as a StatefulSet because:
+
+* stable network identities
+* stable storage
+* ordered startup
+
+#### Persistent Volumes
+
+Data remains available even if pods restart.
+
+#### Replication
+
+Provides:
+
+* higher availability
+* read scalability
+* disaster recovery
 
 </details>
 
 ---
 
 <details>
-<summary>Exercise 4: Extract Pipeline Logic into a Jenkins Shared Library</summary>
+<summary>Exercise 3: Deploy the Java Application</summary>
 
 <br />
 
-To improve pipeline reusability and reduce duplicated code, some pipeline logic was extracted into a Jenkins Shared Library with parameters.
+The Java Spring Boot application was containerized, pushed to Docker Hub and deployed with multiple replicas.
 
-This allows multiple projects to reuse common CI/CD functionality.
+### Build Application
 
-
-### Steps:
-
-* Created a separate Git repository for the shared library at [Jenkins Shared Library](https://github.com/lihandafabius/Jenkins-shared-library.git)
-* Added reusable Groovy scripts `buildDockerImage.groovy` and `commitCheck.groovyunder` inside the `vars/` folder:
-
-### Build Docker Image Script
-
-```groovy
-#!/usr/bin/env
-
-def call(String imageName) {
-    echo 'Building docker image'
-    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-        sh "cd jenkins-exercises/app/ && docker build -t $imageName ."
-        sh "echo $PASS | docker login -u $USER --password-stdin"
-        sh "docker push $imageName"
-    }
-}
+```bash
+./gradlew build
 ```
 
-### Commit Check Script
+### Build Docker Image
 
-```groovy
-#!/usr/bin/env
-
-def call() {
-    def commitMessage = sh(
-            script: "git log -1 --pretty=%B",
-            returnStdout: true
-    ).trim()
-
-    echo 'Commit message: ${commitMessage}'
-
-    if (commitMessage.contains('[skip ci]')) {
-        currentBuild.result = 'NOT_BUILT'
-        error('Skipping build triggered by Jenkins commit')
-    }
-}
+```bash
+docker build \
+-t lihanda/demo-app:java-app-1.0 .
 ```
 
-### Commit Version Update Script
+### Push Docker Image
 
-```groovy
-#!/usr/bin/env
-
-def call() {
-    withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-        sh '''
-            git config --global user.email "jenkins@example.com"
-            git config --global user.name "jenkins"
-
-            git remote set-url origin https://${USER}:${PASS}@github.com/lihandafabius/Devops_Nana-Techworld_Bootcamp.git
-
-            git add .
-            git commit -m "ci: version bump [skip ci]" || true
-
-            git pull --rebase origin main
-
-            git push origin HEAD:main
-        '''
-    }
-}
-
+```bash
+docker push lihanda/demo-app:java-app-1.0
 ```
 
-### Jenkins Configuration
+### Create Docker Hub Secret
 
-The shared library was configured globally in Jenkins:
+The image is stored in a private Docker Hub repository.
 
-![Jenkins-shared-lib configuration](shared-lib.png)
+A Kubernetes image pull secret was created:
 
-### Jenkins-shared-library Jenkinsfile
-
-```groovy
-#!/usr/bin/env
-
-@Library('Jenkins-shared-library')_
-
-pipeline {
-    agent any
-    tools {
-        nodejs 'node'
-    }
-
-    stages {
-        stage('Check commit message') {
-            steps {
-                script {
-                    commitCheck()
-                }
-            }
-        }
-        stage('Increment app version') {
-            steps {
-                script {
-                    incrementAppVersion()
-                }
-            }
-        }
-        stage('Test code') {
-            steps {
-                script {
-                    echo 'Running test'
-                    sh 'cd jenkins-exercises/app && npm install && npm run test'
-                }
-            }
-        }
-        stage('Build docker image') {
-            steps {
-                script {
-                    buildDockerImage 'lihanda/demo-app:${IMAGE_NAME}'
-                }
-            }
-        }
-        stage('Deploy') {
-            steps {
-                script {
-                    echo 'Deploying the application ..'
-                }
-            }
-        }
-        stage('Commit version update') {
-            steps {
-                script {
-                    commitVersionUpdate()
-                }
-            }
-        }
-    }
-
-}
+```bash
+kubectl create secret docker-registry my-registry-key \
+--docker-server=https://index.docker.io/v1/ \
+--docker-username=<dockerhub-user> \
+--docker-password=<dockerhub-token>
 ```
+
+### Create ConfigMap
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+
+metadata:
+  name: mysql-config
+
+data:
+  DB_SERVER: mysql-primary
+  DB_NAME: my_database
+```
+
+### Create Secret
+
+```yaml
+apiVersion: v1
+kind: Secret
+
+metadata:
+  name: mysql-secret
+
+type: Opaque
+
+stringData:
+  DB_USER: myuser
+  DB_PWD: mypassword
+```
+
+### Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: java-mysql-app
+
+spec:
+  replicas: 2
+
+  selector:
+    matchLabels:
+      app: java-mysql-app
+
+  template:
+    metadata:
+      labels:
+        app: java-mysql-app
+
+    spec:
+      imagePullSecrets:
+      - name: my-registry-key
+
+      containers:
+      - name: java-mysql-app
+
+        image: lihanda/demo-app:java-app-1.0
+
+        ports:
+        - containerPort: 8080
+```
+
+### Service
+
+```yaml
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: java-mysql-app-service
+
+spec:
+  type: ClusterIP
+
+  selector:
+    app: java-mysql-app
+
+  ports:
+  - port: 8080
+    targetPort: 8080
+```
+
+### Key Concepts
+
+#### Deployment
+
+Responsible for:
+
+* rolling updates
+* rollback support
+* pod lifecycle management
+
+#### ReplicaSet
+
+Ensures two application pods are always running.
+
+#### ConfigMap
+
+Stores non-sensitive configuration.
+
+#### Secret
+
+Stores sensitive values securely.
 
 </details>
 
 ---
 
-## Challenges & Fixes
+<details>
+<summary>Exercise 4: Deploy phpMyAdmin</summary>
 
-### 1. GitHub Webhook Infinite Trigger Loop
+<br />
 
-* **Issue:** Jenkins pushed version bump commits back to GitHub, which continuously retriggered the webhook
+phpMyAdmin was deployed to provide a graphical interface for managing MySQL.
 
-* **Fix:**
+Because it is only used by administrators, a single replica was sufficient.
 
-  * Added `[skip ci]` to Jenkins-generated commits
-  * Added commit message validation stage at the beginning of the pipeline
+### Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: phpmyadmin-deployment
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: phpmyadmin
+
+  template:
+    metadata:
+      labels:
+        app: phpmyadmin
+
+    spec:
+      containers:
+      - name: phpmyadmin
+
+        image: phpmyadmin:latest
+
+        ports:
+        - containerPort: 80
+
+        env:
+        - name: PMA_HOST
+          value: mysql-primary
+
+        - name: PMA_PORT
+          value: "3306"
+```
+
+### Service
+
+```yaml
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: phpmyadmin-service
+
+spec:
+  type: ClusterIP
+
+  selector:
+    app: phpmyadmin
+
+  ports:
+  - port: 80
+    targetPort: 80
+```
+
+### Key Concepts
+
+#### Service Discovery
+
+phpMyAdmin connects to MySQL using:
+
+```text
+mysql-primary
+```
+
+which is resolved automatically by Kubernetes DNS.
+
+#### Internal Access
+
+The service remains internal to the cluster.
+
+</details>
+
+---
+
+<details>
+<summary>Exercise 5: Deploy NGINX Ingress Controller</summary>
+
+<br />
+
+To expose the application externally, an NGINX Ingress Controller was installed using Helm.
+
+### Why an Ingress Controller?
+
+Without Ingress:
+
+* every application requires its own LoadBalancer
+* higher cloud costs
+* difficult routing management
+
+With Ingress:
+
+* one LoadBalancer
+* multiple applications
+* centralized routing
+
+### Install NGINX Ingress
+
+```bash
+helm install nginx-ingress \
+oci://ghcr.io/nginx/charts/nginx-ingress \
+--set controller.reportIngressStatus.enabled=true \
+--set controller.service.type=LoadBalancer \
+--set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"="internet-facing"
+```
+
+### AWS Subnet Tagging
+
+The ingress service initially failed to create a load balancer because the VPC subnets were tagged for an old cluster.
+
+Error:
+
+```text
+Failed build model due to unable to resolve at least one subnet
+```
+
+### Fix
+
+Updated subnet tags:
+
+```text
+kubernetes.io/role/elb=1
+kubernetes.io/cluster/java-mysql-application=shared
+```
+
+### Verify
+
+```bash
+kubectl get svc
+```
+
+Example:
+
+```text
+nginx-ingress-controller   LoadBalancer
+```
+
+### Key Concepts
+
+#### Ingress Controller
+
+Runs inside the cluster and processes ingress rules.
+
+#### Load Balancer
+
+Provides external access to the ingress controller.
+
+#### Internet-Facing ELB
+
+Allows public access to the application.
+
+</details>
+
+---
+
+<details>
+<summary>Exercise 6: Create Ingress Rule</summary>
+
+<br />
+
+An Ingress resource was created to route incoming traffic to the Java application.
+
+### Ingress
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+
+metadata:
+  name: mysql-java-app-ingress
+
+spec:
+  ingressClassName: nginx
+
+  rules:
+  - host: k8s-default-nginxing-xxxx.elb.eu-north-1.amazonaws.com
+
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+
+        backend:
+          service:
+            name: java-mysql-app-service
+
+            port:
+              number: 8080
+```
+
+### Frontend Configuration
+
+The application frontend was updated to use the ELB DNS name:
+
+```javascript
+const HOST = "k8s-default-nginxing-xxxx.elb.eu-north-1.amazonaws.com";
+```
+
+### Key Concepts
+
+#### Ingress Rule
+
+Defines how requests are routed.
+
+#### Host-Based Routing
+
+Routes traffic based on DNS hostname.
+
+#### Backend Service
+
+Traffic is forwarded to:
+
+```text
+java-mysql-app-service
+```
+
+which distributes requests across both replicas.
+
+</details>
+
+---
+
+<details>
+<summary>Exercise 7: Configure Port Forwarding for phpMyAdmin</summary>
+
+<br />
+
+phpMyAdmin should not be publicly accessible.
+
+Instead, Kubernetes port forwarding was configured.
+
+### Port Forward
+
+```bash
+kubectl port-forward svc/phpmyadmin-service 8081:80
+```
+
+### Access
+
+```text
+http://localhost:8081
+```
+
+### Benefits
+
+* No public exposure
+* Temporary access
+* Better security posture
+
+### Common Use Cases
+
+* Databases
+* Monitoring dashboards
+* Internal administration tools
+* Debugging applications
+
+</details>
+
+---
+
+<details>
+<summary>Exercise 8: Create Helm Chart for the Java Application</summary>
+
+<br />
+
+To improve reusability and simplify deployments, the Java application resources were packaged into a Helm Chart.
+
+### Chart Structure
+
+```text
+java-mysql-app/
+│
+├── Chart.yaml
+├── values.yaml
+│
+└── templates/
+    ├── deployment.yaml
+    ├── service.yaml
+    ├── ingress.yaml
+    ├── configmap.yaml
+    └── secret.yaml
+```
+
+### values.yaml
+
+```yaml
+appName: java-mysql-app
+
+appReplicas: 2
+
+appImage: lihanda/demo-app
+appVersion: java-app-1.0
+
+imagePullPolicy: Always
+
+imagePullSecrets:
+  - my-registry-key
+
+containerPort: 8080
+
+serviceType: ClusterIP
+servicePort: 8080
+
+containerEnvVars:
+  - name: DB_SERVER
+    configMapKeyRef:
+      name: mysql-config
+      key: DB_SERVER
+
+  - name: DB_NAME
+    configMapKeyRef:
+      name: mysql-config
+      key: DB_NAME
+
+  - name: DB_USER
+    secretKeyRef:
+      name: mysql-secret
+      key: DB_USER
+
+  - name: DB_PWD
+    secretKeyRef:
+      name: mysql-secret
+      key: DB_PWD
+```
+
+### Template Features
+
+The chart templates support:
+
+* configurable image tags
+* configurable replicas
+* configurable ingress
+* configurable services
+* configurable secrets
+* configurable ConfigMaps
+
+### Validate Chart
+
+```bash
+helm lint .
+```
+
+### Render Templates
+
+```bash
+helm template .
+```
+
+### Server-Side Validation
+
+```bash
+kubectl apply -f <(helm template .) --dry-run=server
+```
+
+### Install Chart
+
+```bash
+helm install java-app .
+```
+
+### Upgrade Chart
+
+```bash
+helm upgrade java-app .
+```
+
+### Restart Deployment
+
+```bash
+kubectl rollout restart deployment java-mysql-app
+```
+
+### Key Concepts
+
+#### Helm
+
+Package manager for Kubernetes.
+
+#### Templates
+
+Allow reusable Kubernetes manifests.
+
+#### Values Files
+
+Provide environment-specific configuration without modifying templates.
+
+</details>
+
+---
+
+# Challenges & Fixes
+
+## 1. Gradle Build Failure
+
+### Issue
+
+Spring Boot required a newer Gradle version than the system installation.
+
+### Fix
+
+Used the Gradle Wrapper:
+
+```bash
+gradle wrapper
+
+./gradlew build
+```
+
+---
+
+## 2. MySQL Connector Dependency Failure
+
+### Issue
+
+Gradle could not resolve:
+
+```text
+mysql:mysql-connector-j
+```
+
+### Fix
+
+Updated dependency coordinates:
+
+```groovy
+implementation 'com.mysql:mysql-connector-j:9.2.0'
+```
+
+---
+
+## 3. Docker Hub Private Repository Authentication
+
+### Issue
+
+Pods could not pull images from Docker Hub.
+
+### Fix
+
+Created image pull secret:
+
+```bash
+kubectl create secret docker-registry my-registry-key
+```
+
+and referenced it in the Deployment.
+
+---
+
+## 4. AWS Load Balancer Creation Failed
+
+### Issue
+
+Ingress service failed with:
+
+```text
+Failed build model due to unable to resolve at least one subnet
+```
+
+### Root Cause
+
+Subnets were tagged for an old EKS cluster.
+
+### Fix
+
+Updated subnet tags:
+
+```text
+kubernetes.io/cluster/java-mysql-application=shared
+```
+
+---
+
+## 5. Ingress Validation Error
+
+### Issue
+
+NGINX rejected ingress:
+
+```text
+spec.rules[0].host: Required value
+```
+
+### Fix
+
+Added a valid host using the AWS ELB DNS name.
+
+---
+
+## 6. Application Could Read but Not Save Data
+
+### Issue
+
+Frontend displayed data but updates failed.
+
+### Root Cause
+
+Incorrect fetch URL:
+
+```javascript
+http://${HOST}update-roles
+```
+
+Missing:
+
+```text
+/
+```
+
+### Fix
+
+```javascript
+http://${HOST}/update-roles
+```
+
+---
+
+## 7. New Docker Images Not Being Used
+
+### Issue
+
+After pushing a new image, the application still showed old behavior.
+
+### Root Cause
+
+The same image tag was reused.
+
+### Fix
+
+Restarted deployment:
+
+```bash
+kubectl rollout restart deployment java-mysql-app
+```
+
+or use versioned image tags.
+
+---
+
+## 8. Understanding Ingress vs LoadBalancer
+
+### Initial Confusion
+
+Both appeared to expose applications externally.
+
+### Understanding
+
+LoadBalancer:
+
+```text
+Internet
+   |
+Service
+   |
+Pods
+```
+
+Ingress:
+
+```text
+Internet
+   |
+LoadBalancer
+   |
+Ingress Controller
+   |
+Ingress Rules
+   |
+Services
+   |
+Pods
+```
+
+Ingress allows multiple applications to share a single external load balancer.
+
+---
+
+# Lessons Learned
+
+* Kubernetes provides self-healing and workload orchestration.
+* Stateful applications require Persistent Volumes and StatefulSets.
+* Helm significantly simplifies application deployment.
+* ConfigMaps and Secrets allow configuration to be externalized.
+* AWS EKS networking depends heavily on correct subnet tagging.
+* Ingress Controllers provide centralized routing and reduce infrastructure costs.
+* Port-forwarding is useful for securely accessing internal services.
+* Versioned Docker image tags are preferable to reusing the same tag.
+* Helm charts make Kubernetes deployments reusable and maintainable.
+* Understanding Kubernetes networking is critical when deploying production workloads.
+
+---
