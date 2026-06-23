@@ -125,11 +125,33 @@ Pods are automatically distributed across available nodes.
 
 <br />
 
-To eliminate the database as a single point of failure, MySQL was deployed using the Bitnami Helm Chart with replication enabled.
+<details>
+<summary>Exercise 2: Deploy MySQL with Replication</summary>
 
-### Create StorageClass
+<br />
 
-Persistent storage was provisioned dynamically using AWS EBS CSI Driver.
+The MySQL database is the most critical component of the application because it stores all application data. Running a single MySQL container would introduce a single point of failure, meaning that if the database became unavailable, the entire application would stop functioning.
+
+To improve reliability and availability, MySQL was deployed using replication, ensuring that database replicas are available if the primary instance becomes unavailable.
+
+### Create a Custom StorageClass
+
+Before deploying MySQL, persistent storage needed to be configured.
+
+Amazon EKS Auto Mode automatically provides a default StorageClass. However, the default class was configured to use **gp2** EBS volumes.
+
+
+![AWS gp2 storageclass](images/aws-storage-class.png)
+
+
+Although gp2 volumes work well, AWS recommends using **gp3** volumes for most new workloads because they provide:
+
+* better performance
+* independent scaling of storage and IOPS
+* lower storage costs
+* more predictable performance
+
+To take advantage of these benefits, a custom StorageClass was created using the AWS EBS CSI Driver.
 
 ```yaml
 apiVersion: storage.k8s.io/v1
@@ -148,7 +170,60 @@ parameters:
 allowVolumeExpansion: true
 ```
 
-### MySQL Helm Values
+The StorageClass was then applied to the cluster:
+
+```bash
+kubectl apply -f storageclass.yaml
+```
+
+![AWS Storageclass](images/storage-class.png)
+
+
+### Why Persistent Storage Is Important
+
+Databases are stateful applications.
+
+Without persistent storage:
+
+* pod deletion would remove all database data
+* node failures could cause permanent data loss
+* application data would not survive restarts
+
+Using Persistent Volumes ensures that data remains available even when database pods are recreated.
+
+### Deploy MySQL Using Helm
+
+Although MySQL could have been deployed manually using:
+
+* StatefulSets
+* Services
+* PersistentVolumeClaims
+* Secrets
+* ConfigMaps
+
+this would require creating and maintaining multiple Kubernetes resources.
+
+To simplify deployment, the Bitnami MySQL Helm Chart was used.
+
+The Helm chart automatically provisions:
+
+* StatefulSets
+* Services
+* PersistentVolumeClaims
+* replication configuration
+* MySQL initialization logic
+
+This significantly reduces the amount of YAML that must be maintained while following Kubernetes best practices.
+
+### Configure MySQL Values
+
+A custom values file was created to configure:
+
+* replication architecture
+* storage settings
+* database credentials
+* replication users
+* storage classes
 
 ```yaml
 architecture: replication
@@ -183,48 +258,41 @@ image:
 
 ### Install MySQL
 
+The Bitnami repository was added and MySQL was installed using the custom values file.
+
 ```bash
 helm repo add bitnami https://charts.bitnami.com/bitnami
 
-helm install mysql bitnami/mysql \
--f mysql-values.yaml
-```
-
-### Verify Deployment
-
-```bash
-kubectl get pods
-```
-
-Example:
-
-```bash
-mysql-primary-0
-mysql-secondary-0
-mysql-secondary-1
+helm install mysql bitnami/mysql -f helm-mysql-values.yaml
 ```
 
 ### Key Concepts
 
-#### StatefulSet
+#### StatefulSets
 
-MySQL is deployed as a StatefulSet because:
+MySQL is deployed as a StatefulSet because databases require:
 
-* stable network identities
+* stable pod identities
 * stable storage
-* ordered startup
+* predictable startup ordering
 
 #### Persistent Volumes
 
-Data remains available even if pods restart.
+Persistent Volumes ensure database data survives:
+
+* pod restarts
+* node replacements
+* rolling upgrades
 
 #### Replication
 
-Provides:
+Replication improves:
 
-* higher availability
+* availability
+* fault tolerance
 * read scalability
-* disaster recovery
+
+while reducing the risk of a single database instance becoming a bottleneck.
 
 </details>
 
