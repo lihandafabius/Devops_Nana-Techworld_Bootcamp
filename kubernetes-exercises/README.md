@@ -125,11 +125,6 @@ Pods are automatically distributed across available nodes.
 
 <br />
 
-<details>
-<summary>Exercise 2: Deploy MySQL with Replication</summary>
-
-<br />
-
 The MySQL database is the most critical component of the application because it stores all application data. Running a single MySQL container would introduce a single point of failure, meaning that if the database became unavailable, the entire application would stop functioning.
 
 To improve reliability and availability, MySQL was deployed using replication, ensuring that database replicas are available if the primary instance becomes unavailable.
