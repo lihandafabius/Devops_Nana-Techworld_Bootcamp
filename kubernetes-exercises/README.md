@@ -258,7 +258,7 @@ The Bitnami repository was added and MySQL was installed using the custom values
 ```bash
 helm repo add bitnami https://charts.bitnami.com/bitnami
 
-helm install mysql bitnami/mysql -f helm-mysql-values.yaml
+helm install mysql --values helm-mysql-values.yaml bitnami/mysql 
 ```
 
 ### Key Concepts
