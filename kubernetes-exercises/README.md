@@ -261,6 +261,10 @@ helm repo add bitnami https://charts.bitnami.com/bitnami
 helm install mysql --values helm-mysql-values.yaml bitnami/mysql 
 ```
 
+### Verify Deployment
+
+![Mysql pods](images/mysql-pods.png)
+
 ### Key Concepts
 
 #### StatefulSets
@@ -300,13 +304,19 @@ while reducing the risk of a single database instance becoming a bottleneck.
 
 The Java Spring Boot application was containerized, pushed to Docker Hub and deployed with multiple replicas.
 
-### Build Application
+Running multiple application replicas improves availability by ensuring that the application remains accessible even if a pod or node fails.
+
+### Build the Application
+
+The application was packaged using the Gradle Wrapper.
 
 ```bash
 ./gradlew build
 ```
 
 ### Build Docker Image
+
+A Docker image was created from the application source code.
 
 ```bash
 docker build \
@@ -315,15 +325,36 @@ docker build \
 
 ### Push Docker Image
 
+The image was then pushed to Docker Hub so that it could be pulled by the Kubernetes cluster.
+
 ```bash
 docker push lihanda/demo-app:java-app-1.0
 ```
 
-### Create Docker Hub Secret
+![Build image](images/build_image.png)
 
-The image is stored in a private Docker Hub repository.
 
-A Kubernetes image pull secret was created:
+### Configure Access to the Private Docker Repository
+
+The Docker image repository was configured as private.
+
+To allow Kubernetes to pull images from Docker Hub, an image pull secret was required.
+
+Instead of manually creating a Secret manifest containing a base64-encoded `.dockerconfigjson` file, the secret was generated directly using the Kubernetes CLI.
+
+This approach:
+
+* reduces manual configuration
+* avoids base64 encoding mistakes
+* automatically creates the required Docker authentication format
+
+A Docker Hub Personal Access Token was used instead of the account password.
+
+Using a token is considered a security best practice because:
+
+* tokens can be revoked independently
+* credentials can be rotated easily
+* account passwords are never exposed to the cluster
 
 ```bash
 kubectl create secret docker-registry my-registry-key \
@@ -332,7 +363,15 @@ kubectl create secret docker-registry my-registry-key \
 --docker-password=<dockerhub-token>
 ```
 
+![Dockerhub secret](images/create_secret.png)
+
+
 ### Create ConfigMap
+
+Application configuration values that are not sensitive were externalized using a ConfigMap.
+The database name was gotten by:
+
+![Database name](images/get_db_name.png)
 
 ```yaml
 apiVersion: v1
@@ -346,7 +385,17 @@ data:
   DB_NAME: my_database
 ```
 
+The ConfigMap stores:
+
+* database hostname
+* database name
+* application configuration values
+
+without requiring application rebuilds.
+
 ### Create Secret
+
+Database credentials were stored separately using a Kubernetes Secret.
 
 ```yaml
 apiVersion: v1
@@ -357,46 +406,84 @@ metadata:
 
 type: Opaque
 
-stringData:
-  DB_USER: myuser
-  DB_PWD: mypassword
+data: 
+  DB_PWD: bXlwYXNzd29yZA==
+  DB_USER: bXl1c2Vy
 ```
 
-### Deployment
+Unlike the Docker registry secret, this secret was created using a YAML manifest because the application requires specific environment variables that are consumed directly by the deployment.
+
+Using a Secret instead of a ConfigMap helps separate sensitive and non-sensitive configuration.
+
+
+![Mysql Config](images/mysql_config_and_secret.png)
+
+
+### Deploy the Application
+
+The deployment was configured with:
+
+* two replicas
+* Docker Hub image authentication
+* ConfigMap integration
+* Secret integration
 
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
-
 metadata:
   name: java-mysql-app
-
+  labels:
+    app: java-mysql-app
 spec:
   replicas: 2
-
   selector:
     matchLabels:
       app: java-mysql-app
-
   template:
     metadata:
       labels:
         app: java-mysql-app
-
     spec:
       imagePullSecrets:
       - name: my-registry-key
-
       containers:
       - name: java-mysql-app
-
         image: lihanda/demo-app:java-app-1.0
+        imagePullPolicy: Always 
 
         ports:
         - containerPort: 8080
+
+        env:
+        - name: DB_SERVER
+          valueFrom:
+            configMapKeyRef:
+              name: mysql-config
+              key: DB_SERVER
+
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: mysql-config
+              key: DB_NAME
+
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: DB_USER
+
+        - name: DB_PWD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: DB_PWD
 ```
 
-### Service
+### Create Service
+
+A ClusterIP service was created to expose the application internally within the cluster.
 
 ```yaml
 apiVersion: v1
@@ -416,6 +503,8 @@ spec:
     targetPort: 8080
 ```
 
+The application is not exposed directly to the internet because external access will later be managed through an Ingress Controller.
+
 ### Key Concepts
 
 #### Deployment
@@ -423,22 +512,27 @@ spec:
 Responsible for:
 
 * rolling updates
-* rollback support
-* pod lifecycle management
+* rollbacks
+* application lifecycle management
 
-#### ReplicaSet
+#### ReplicaSets
 
-Ensures two application pods are always running.
+Ensures that the desired number of application pods are always running.
 
-#### ConfigMap
+#### ConfigMaps
 
-Stores non-sensitive configuration.
+Store non-sensitive configuration separately from application code.
 
-#### Secret
+#### Secrets
 
-Stores sensitive values securely.
+Store sensitive values such as passwords and credentials.
+
+#### Image Pull Secrets
+
+Allow Kubernetes to authenticate against private container registries and pull protected images securely.
 
 </details>
+
 
 ---
 
