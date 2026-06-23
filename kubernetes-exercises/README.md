@@ -73,27 +73,25 @@ The project covers:
 
 <br />
 
-An Amazon EKS cluster was created to host the application workloads.
+An Amazon EKS cluster was created using **EKS Auto Mode**.
 
 Unlike a traditional Docker Compose deployment running on a single VM, Kubernetes provides automated scheduling, self-healing, scaling and workload distribution across multiple nodes.
 
-### Create Cluster
+Using EKS Auto Mode simplified cluster management because AWS automatically provisions and manages the worker nodes required to run workloads.
 
-The cluster was provisioned on AWS EKS.
+### Create IAM Roles
 
-### Verify Cluster
+Before creating the cluster, IAM roles were configured for both the EKS control plane and worker nodes.
 
-```bash
-kubectl get nodes
-```
+#### Cluster IAM Role
 
-Example:
+The cluster IAM role allows the EKS control plane to interact with AWS services on behalf
 
-```bash
-NAME                                          STATUS   ROLES    AGE
-ip-192-168-xx-xx.eu-north-1.compute.internal  Ready    <none>   2h
-ip-192-168-xx-xx.eu-north-1.compute.internal  Ready    <none>   2h
-```
+![AWS EKS Cluster](images/cluster.png)
+
+#### Verify cluster 
+
+![AWS EKS Cluster node](images/cluster-node.png)
 
 ### Key Concepts
 
