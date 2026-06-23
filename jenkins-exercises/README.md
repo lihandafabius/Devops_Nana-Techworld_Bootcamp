@@ -469,7 +469,7 @@ pipeline {
 
 ---
 
-## Challenges & Fixes
+### Challenges & Fixes
 
 ### 1. GitHub Webhook Infinite Trigger Loop
 
@@ -479,3 +479,4 @@ pipeline {
 
   * Added `[skip ci]` to Jenkins-generated commits
   * Added commit message validation stage at the beginning of the pipeline
+ 
