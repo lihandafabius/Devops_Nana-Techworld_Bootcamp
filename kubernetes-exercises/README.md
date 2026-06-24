@@ -743,7 +743,19 @@ Provides a single entry point for multiple applications instead of provisioning 
 
 <br />
 
-An Ingress resource was created to route incoming traffic to the Java application.
+After deploying the NGINX Ingress Controller, an Ingress resource was created to define how external requests should be routed to the application running inside the cluster.
+
+### Why an Ingress Rule?
+
+An Ingress Controller provides the routing engine, but it does not know where requests should be sent until Ingress rules are defined.
+
+Ingress rules specify:
+
+* which hostname users access
+* which URL paths are available
+* which Kubernetes service should receive the traffic
+
+This allows multiple applications to share the same external LoadBalancer while still being routed correctly.
 
 ### Ingress
 
@@ -773,33 +785,81 @@ spec:
               number: 8080
 ```
 
+### Traffic Flow
+
+```text
+Internet
+    |
+AWS Load Balancer
+    |
+NGINX Ingress Controller
+    |
+Ingress Rule
+    |
+java-mysql-app-service
+    |
++-------------------+
+|                   |
+Pod 1          Pod 2
+```
+
 ### Frontend Configuration
 
 The application frontend was updated to use the ELB DNS name:
 
-```javascript
-const HOST = "k8s-default-nginxing-xxxx.elb.eu-north-1.amazonaws.com";
-```
+![index.html chnage](images/html_change.png)
+
+This allows the frontend JavaScript code to communicate with the backend through the Ingress endpoint instead of using localhost.
+
+
+### Verify App Access
+
+![App Access](images/app_with_edit.png)
+
+
+![Database Changes](images/database_changes.png)
+
 
 ### Key Concepts
 
-#### Ingress Rule
+#### Ingress Resource
 
-Defines how requests are routed.
+Defines routing rules for incoming traffic.
 
 #### Host-Based Routing
 
-Routes traffic based on DNS hostname.
+Routes traffic based on the requested hostname.
+
+Examples:
+
+```text
+orders.company.com  -> Orders Service
+payments.company.com -> Payments Service
+```
+
+#### Path-Based Routing
+
+Routes traffic based on URL paths.
+
+Examples:
+
+```text
+/app      -> Java Application
+/api      -> Backend API
+/admin    -> Admin Portal
+```
 
 #### Backend Service
 
-Traffic is forwarded to:
+The backend service acts as the destination for routed traffic.
+
+In this project, requests are forwarded to:
 
 ```text
 java-mysql-app-service
 ```
 
-which distributes requests across both replicas.
+which automatically load balances traffic across the application replicas.
 
 </details>
 
