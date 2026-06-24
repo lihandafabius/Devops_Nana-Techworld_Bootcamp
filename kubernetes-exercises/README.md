@@ -915,25 +915,133 @@ http://localhost:8081
 
 <br />
 
-To improve reusability and simplify deployments, the Java application resources were packaged into a Helm Chart.
+After successfully deploying the application manually using individual Kubernetes manifests, the final step was to package the application into a reusable Helm Chart.
 
-### Chart Structure
+Helm is the de facto package manager for Kubernetes and allows applications to be distributed, versioned and deployed in a consistent and repeatable manner.
 
-```text
-java-mysql-app/
-│
-├── Chart.yaml
-├── values.yaml
-│
-└── templates/
-    ├── deployment.yaml
-    ├── service.yaml
-    ├── ingress.yaml
-    ├── configmap.yaml
-    └── secret.yaml
+### Why Helm?
+
+Managing multiple Kubernetes YAML files manually becomes difficult as applications grow especially for microservice applications.
+
+For every deployment, operators would need to maintain:
+
+* Deployment manifests
+* Services
+* ConfigMaps
+* Secrets
+* Ingress resources
+
+Any environment-specific change would require modifying YAML files directly.
+
+Helm solves this problem by introducing:
+
+* reusable templates
+* centralized configuration
+* versioned application releases
+* simplified upgrades and rollbacks
+
+This allows developers to deploy the same application across multiple environments simply by providing different values files.
+
+
+### Creating the Chart
+
+A new chart was created using:
+
+```bash
+helm create java-mysql-app
 ```
 
-### values.yaml
+The generated templates were then customized to match the application's architecture and requirements.
+
+### Deployment Template
+
+The deployment template was parameterized to support:
+
+* configurable image versions
+* configurable replica counts
+* configurable image pull secrets
+* configurable environment variables
+
+Example:
+
+```yaml
+replicas: {{ .Values.appReplicas }}
+
+image: "{{ .Values.appImage }}:{{ .Values.appVersion }}"
+```
+
+Environment variables were dynamically generated using the Helm `range` function:
+
+```yaml
+{{- range .Values.containerEnvVars }}
+- name: {{ .name }}
+  valueFrom:
+{{- if .configMapKeyRef }}
+    configMapKeyRef:
+      name: {{ .configMapKeyRef.name }}
+      key: {{ .configMapKeyRef.key }}
+{{- end }}
+{{- if .secretKeyRef }}
+    secretKeyRef:
+      name: {{ .secretKeyRef.name }}
+      key: {{ .secretKeyRef.key }}
+{{- end }}
+{{- end }}
+```
+
+This approach eliminates duplication and allows developers to add environment variables through configuration instead of modifying templates.
+
+### Service Template
+
+The service configuration was made configurable through values:
+
+```yaml
+type: {{ .Values.serviceType }}
+```
+
+This allows environments to switch between:
+
+* ClusterIP
+* NodePort
+* LoadBalancer
+
+without changing template files.
+
+### ConfigMap Template
+
+Application configuration values were externalized into a ConfigMap template:
+
+```yaml
+data:
+  DB_SERVER: {{ .Values.dbServer | quote }}
+  DB_NAME: {{ .Values.dbName | quote }}
+```
+
+### Secret Template
+
+Sensitive values were managed through a Secret template:
+
+```yaml
+stringData:
+  DB_USER: {{ .Values.dbUser | quote }}
+  DB_PWD: {{ .Values.dbPassword | quote }}
+```
+
+This separates sensitive configuration from application code.
+
+### Ingress Template
+
+Ingress resources were fully parameterized:
+
+```yaml
+ingressClassName: {{ .Values.ingressClassName }}
+
+host: {{ .Values.ingressHost }}
+```
+
+This enables the same chart to be deployed across different clusters using different DNS names.
+
+### Example values.yaml
 
 ```yaml
 appName: java-mysql-app
@@ -953,126 +1061,147 @@ containerPort: 8080
 serviceType: ClusterIP
 servicePort: 8080
 
-containerEnvVars:
-  - name: DB_SERVER
-    configMapKeyRef:
-      name: mysql-config
-      key: DB_SERVER
+configMapName: mysql-config
 
-  - name: DB_NAME
-    configMapKeyRef:
-      name: mysql-config
-      key: DB_NAME
+dbServer: mysql-primary
+dbName: my_database
 
-  - name: DB_USER
-    secretKeyRef:
-      name: mysql-secret
-      key: DB_USER
+secretName: mysql-secret
 
-  - name: DB_PWD
-    secretKeyRef:
-      name: mysql-secret
-      key: DB_PWD
+dbUser: myuser
+dbPassword: mypassword
+
+ingressName: mysql-java-app-ingress
+
+ingressClassName: nginx
+
+ingressHost: k8s-default-nginxing-c0f0e6c192-6ea0d96868828de6.elb.eu-north-1.amazonaws.com
 ```
 
-### Template Features
+### Chart Validation
 
-The chart templates support:
+Before deployment, the chart was validated.
 
-* configurable image tags
-* configurable replicas
-* configurable ingress
-* configurable services
-* configurable secrets
-* configurable ConfigMaps
-
-### Validate Chart
+#### Linting
 
 ```bash
 helm lint .
 ```
 
-### Render Templates
+Checks:
+
+* template syntax
+* chart structure
+* common Helm errors
+
+#### Render Templates
 
 ```bash
 helm template .
 ```
 
-### Server-Side Validation
+Renders Kubernetes manifests locally without deploying them.
+
+#### Server-Side Validation
 
 ```bash
 kubectl apply -f <(helm template .) --dry-run=server
 ```
 
-### Install Chart
+This validates the generated manifests against the Kubernetes API server without creating resources.
+
+### Deploy Chart
+
+Install the application:
 
 ```bash
 helm install java-app .
 ```
 
+Verify release:
+
+```bash
+helm list
+```
+
 ### Upgrade Chart
+
+When application configuration changes:
 
 ```bash
 helm upgrade java-app .
 ```
 
-### Restart Deployment
+Helm compares the current state against the new templates and applies only the required changes.
 
-```bash
-kubectl rollout restart deployment java-mysql-app
-```
+
+This triggers a rolling restart of the pods while maintaining application availability.
+
+### Hosting the Helm Chart
+
+Helm charts can be hosted in several ways:
+
+* Git repositories
+* GitHub Pages
+* OCI Registries
+* ChartMuseum
+* ArtifactHub
+* Amazon ECR OCI Registry
+
+For this project, the chart was stored in its own Git repository:
+
+ Repository: [java-mysql-app-helm-chart](https://github.com/lihandafabius/java-mysql-app-helm-chart)
+
+This provides version control, collaboration and easy distribution to other developers.
 
 ### Key Concepts
 
 #### Helm
 
-Package manager for Kubernetes.
+The package manager for Kubernetes.
 
 #### Templates
 
-Allow reusable Kubernetes manifests.
+Allow Kubernetes manifests to be dynamically generated.
 
 #### Values Files
 
-Provide environment-specific configuration without modifying templates.
+Separate configuration from templates.
+
+#### Releases
+
+Helm tracks application deployments as releases, enabling upgrades and rollbacks.
+
+#### Reusability
+
+The same chart can be deployed repeatedly across:
+
+* development
+* testing
+* staging
+* production
+
+using different values files.
 
 </details>
 
 ---
 
-# Challenges & Fixes
+## Challenges & Fixes
 
-## 1. Gradle Build Failure
+### 1. MySQL Connector Dependency Failure
 
-### Issue
+#### Issue
 
-Spring Boot required a newer Gradle version than the system installation.
-
-### Fix
-
-Used the Gradle Wrapper:
-
-```bash
-gradle wrapper
-
-./gradlew build
-```
-
----
-
-## 2. MySQL Connector Dependency Failure
-
-### Issue
-
-Gradle could not resolve:
+The application failed to build because Gradle could not resolve the MySQL JDBC driver dependency.
 
 ```text
 mysql:mysql-connector-j
 ```
 
-### Fix
+#### Fix
 
-Updated dependency coordinates:
+Updated the dependency to the correct Maven coordinates:
 
 ```groovy
 implementation 'com.mysql:mysql-connector-j:9.2.0'
@@ -1080,41 +1209,23 @@ implementation 'com.mysql:mysql-connector-j:9.2.0'
 
 ---
 
-## 3. Docker Hub Private Repository Authentication
+### 2. AWS Load Balancer Creation Failed
 
-### Issue
+#### Issue
 
-Pods could not pull images from Docker Hub.
-
-### Fix
-
-Created image pull secret:
-
-```bash
-kubectl create secret docker-registry my-registry-key
-```
-
-and referenced it in the Deployment.
-
----
-
-## 4. AWS Load Balancer Creation Failed
-
-### Issue
-
-Ingress service failed with:
+The NGINX Ingress Controller service failed to provision an AWS Load Balancer.
 
 ```text
 Failed build model due to unable to resolve at least one subnet
 ```
 
-### Root Cause
+#### Root Cause
 
-Subnets were tagged for an old EKS cluster.
+The VPC subnets were tagged for a previous EKS cluster, preventing AWS from selecting them for the new load balancer.
 
-### Fix
+#### Fix
 
-Updated subnet tags:
+Updated the subnet tags to reference the current EKS cluster:
 
 ```text
 kubernetes.io/cluster/java-mysql-application=shared
@@ -1122,121 +1233,46 @@ kubernetes.io/cluster/java-mysql-application=shared
 
 ---
 
-## 5. Ingress Validation Error
+### 3. Ingress Controller Created an Internal Load Balancer
 
-### Issue
+#### Issue
 
-NGINX rejected ingress:
+The application was not accessible from the internet even though the Ingress Controller was running successfully.
+
+#### Root Cause
+
+AWS provisioned an internal load balancer instead of a public-facing load balancer.
+
+#### Fix
+
+Configured the Ingress Controller service with the following annotation:
+
+```yaml
+service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+```
+
+This ensured AWS created a public Elastic Load Balancer (ELB).
+
+---
+
+### 4. Ingress Validation Error
+
+#### Issue
+
+The Ingress resource was rejected by the NGINX Ingress Controller.
 
 ```text
 spec.rules[0].host: Required value
 ```
 
-### Fix
+#### Fix
 
-Added a valid host using the AWS ELB DNS name.
+Added a valid host entry using the AWS ELB DNS name generated by the Ingress Controller service.
 
----
-
-## 6. Application Could Read but Not Save Data
-
-### Issue
-
-Frontend displayed data but updates failed.
-
-### Root Cause
-
-Incorrect fetch URL:
-
-```javascript
-http://${HOST}update-roles
-```
-
-Missing:
-
-```text
-/
-```
-
-### Fix
-
-```javascript
-http://${HOST}/update-roles
+```yaml
+rules:
+- host: <elb-dns-name>
 ```
 
 ---
 
-## 7. New Docker Images Not Being Used
-
-### Issue
-
-After pushing a new image, the application still showed old behavior.
-
-### Root Cause
-
-The same image tag was reused.
-
-### Fix
-
-Restarted deployment:
-
-```bash
-kubectl rollout restart deployment java-mysql-app
-```
-
-or use versioned image tags.
-
----
-
-## 8. Understanding Ingress vs LoadBalancer
-
-### Initial Confusion
-
-Both appeared to expose applications externally.
-
-### Understanding
-
-LoadBalancer:
-
-```text
-Internet
-   |
-Service
-   |
-Pods
-```
-
-Ingress:
-
-```text
-Internet
-   |
-LoadBalancer
-   |
-Ingress Controller
-   |
-Ingress Rules
-   |
-Services
-   |
-Pods
-```
-
-Ingress allows multiple applications to share a single external load balancer.
-
----
-
-# Lessons Learned
-
-* Kubernetes provides self-healing and workload orchestration.
-* Stateful applications require Persistent Volumes and StatefulSets.
-* Helm significantly simplifies application deployment.
-* ConfigMaps and Secrets allow configuration to be externalized.
-* AWS EKS networking depends heavily on correct subnet tagging.
-* Ingress Controllers provide centralized routing and reduce infrastructure costs.
-* Port-forwarding is useful for securely accessing internal services.
-* Versioned Docker image tags are preferable to reusing the same tag.
-* Helm charts make Kubernetes deployments reusable and maintainable.
-* Understanding Kubernetes networking is critical when deploying production workloads.
-
----
