@@ -813,6 +813,7 @@ This allows the frontend JavaScript code to communicate with the backend through
 
 
 ### Verify App Access
+Changes were made to the application to test statefulness
 
 ![App Access](images/app_with_edit.png)
 
@@ -874,17 +875,23 @@ phpMyAdmin should not be publicly accessible.
 
 Instead, Kubernetes port forwarding was configured.
 
+Port forwarding creates a temporary tunnel between a local machine and a pod or service running inside a cluster.
+
 ### Port Forward
 
-```bash
-kubectl port-forward svc/phpmyadmin-service 8081:80
-```
+![Port forwarding](images/port-forward.png)
 
 ### Access
 
 ```text
 http://localhost:8081
 ```
+
+![Phpmyadmin Access Local](images/phpmmyadmin_localhost.png)
+
+
+![Verify tables](images/verify_phpmyadmin_tables.png)
+
 
 ### Benefits
 
