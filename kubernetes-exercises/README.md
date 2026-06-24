@@ -333,6 +333,8 @@ docker push lihanda/demo-app:java-app-1.0
 
 ![Build image](images/build_image.png)
 
+![Dockerhub image](images/dockerhub_image.png)
+
 
 ### Configure Access to the Private Docker Repository
 
@@ -349,6 +351,8 @@ This approach:
 * automatically creates the required Docker authentication format
 
 A Docker Hub Personal Access Token was used instead of the account password.
+
+![Dockerhub token](images/docker_secret_token.png)
 
 Using a token is considered a security best practice because:
 
@@ -541,9 +545,11 @@ Allow Kubernetes to authenticate against private container registries and pull p
 
 <br />
 
-phpMyAdmin was deployed to provide a graphical interface for managing MySQL.
+Although MySQL can be administered using command-line tools, managing databases through a graphical interface is often faster and more convenient.
 
-Because it is only used by administrators, a single replica was sufficient.
+To simplify database administration and verification during development, phpMyAdmin was deployed inside the Kubernetes cluster.
+
+Because phpMyAdmin is only used by administrators and not by application end users, high availability was not a requirement. Therefore, a single replica was sufficient.
 
 ### Deployment
 
@@ -603,23 +609,35 @@ spec:
     targetPort: 80
 ```
 
+### Verify Deployment
+
+![Phpmyadmin deployment](images/create_phpmyadmin.png)
+
+
 ### Key Concepts
 
 #### Service Discovery
 
-phpMyAdmin connects to MySQL using:
+phpMyAdmin connects to MySQL using the Kubernetes Service name:
 
 ```text
 mysql-primary
 ```
 
-which is resolved automatically by Kubernetes DNS.
+Kubernetes DNS automatically resolves this name to the correct database endpoint.
+
+#### Environment Variables
+
+The `PMA_HOST` and `PMA_PORT` environment variables tell phpMyAdmin which MySQL instance it should connect to.
 
 #### Internal Access
 
-The service remains internal to the cluster.
+The service was configured as a `ClusterIP`, making it accessible only from within the cluster.
+
+This prevents direct internet access to the database administration interface and reduces the attack surface of the environment.
 
 </details>
+
 
 ---
 
@@ -628,78 +646,95 @@ The service remains internal to the cluster.
 
 <br />
 
-To expose the application externally, an NGINX Ingress Controller was installed using Helm.
+At this stage, the application was running successfully inside the Kubernetes cluster, but it was only accessible through internal cluster networking and port-forwarding.
+
+To provide external access, an NGINX Ingress Controller was deployed.
 
 ### Why an Ingress Controller?
 
-Without Ingress:
+An Ingress resource only defines routing rules. To actually process those rules and route traffic into the cluster, an Ingress Controller is required.
 
-* every application requires its own LoadBalancer
-* higher cloud costs
-* difficult routing management
+Several Ingress Controller implementations exist, including:
 
-With Ingress:
+* NGINX Ingress Controller
+* AWS Load Balancer Controller
+* Traefik
+* HAProxy Ingress
+* Kong Ingress Controller
+* Istio Ingress Gateway
 
-* one LoadBalancer
-* multiple applications
-* centralized routing
+For this project, the NGINX Ingress Controller was selected because it is one of the most widely adopted and cloud-agnostic solutions in the Kubernetes ecosystem.
 
-### Install NGINX Ingress
+Without an Ingress Controller, every application would require its own external LoadBalancer service which would lead to:
+
+* increases cloud costs
+* creates unnecessary infrastructure
+* becomes difficult to manage as the number of applications grows
+
+An Ingress Controller provides a centralized entry point into the cluster.
+
+This allows a single external endpoint to route traffic to multiple services based on hostnames or URL paths.
+
+### Gateway API
+
+Although Ingress remains widely used today, Kubernetes networking is gradually evolving toward the Gateway API.
+
+The Gateway API addresses several limitations of traditional Ingress by providing:
+
+* more advanced traffic routing
+* traffic splitting and canary deployments
+* support for TCP and UDP traffic
+* better separation between platform and application teams
+
+Ingress remains the most commonly used solution today, while Gateway API represents the future direction of Kubernetes networking.
+
+### Install NGINX Ingress Controller
+
+The NGINX Ingress Controller was installed using Helm from the OCI repository.
 
 ```bash
-helm install nginx-ingress \
-oci://ghcr.io/nginx/charts/nginx-ingress \
+helm install nginx-ingress oci://ghcr.io/nginx/charts/nginx-ingress \
 --set controller.reportIngressStatus.enabled=true \
---set controller.service.type=LoadBalancer \
+--set controller.service.type=LoadBalancer \ 
 --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-scheme"="internet-facing"
 ```
+> Note: Many ingress controller Helm charts default to `LoadBalancer` when deployed in cloud environments, but explicitly setting the value makes the deployment behavior clear and predictable.
+> The `controller.reportIngressStatus.enabled=true` setting allows the Ingress Controller to publish its external address back to Ingress resources, making it easier to determine the endpoint assigned by AWS.
+> The `aws-load-balancer-scheme=internet-facing` annotation ensures that AWS creates a public-facing load balancer. Without this configuration, the load balancer may be created as internal-only, preventing access from the public internet.
 
-### AWS Subnet Tagging
+![Ingress Controller deployment](images/deploy-ingress-controller.png)
 
-The ingress service initially failed to create a load balancer because the VPC subnets were tagged for an old cluster.
 
-Error:
+### Verify Installation
 
-```text
-Failed build model due to unable to resolve at least one subnet
-```
+![Verify Nginx Service](images/verify_nginx_svc.png)
 
-### Fix
 
-Updated subnet tags:
+A loadbalancer is also provisioned in AWS
 
-```text
-kubernetes.io/role/elb=1
-kubernetes.io/cluster/java-mysql-application=shared
-```
+![AWS Loadbalancer](images/loadbalancer.png)
 
-### Verify
-
-```bash
-kubectl get svc
-```
-
-Example:
-
-```text
-nginx-ingress-controller   LoadBalancer
-```
 
 ### Key Concepts
 
 #### Ingress Controller
 
-Runs inside the cluster and processes ingress rules.
+A Kubernetes component responsible for processing Ingress resources and routing external traffic to internal services.
 
-#### Load Balancer
+#### LoadBalancer Service
 
-Provides external access to the ingress controller.
+Creates an AWS Elastic Load Balancer that forwards external traffic into the cluster.
 
 #### Internet-Facing ELB
 
-Allows public access to the application.
+Allows applications running inside Kubernetes to be accessible from the public internet.
+
+#### Centralized Traffic Management
+
+Provides a single entry point for multiple applications instead of provisioning a separate load balancer for every service.
 
 </details>
+
 
 ---
 
