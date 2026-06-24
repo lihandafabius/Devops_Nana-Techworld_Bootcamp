@@ -333,6 +333,8 @@ docker push lihanda/demo-app:java-app-1.0
 
 ![Build image](images/build_image.png)
 
+![Dockerhub image](images/dockerhub_image.png)
+
 
 ### Configure Access to the Private Docker Repository
 
@@ -349,6 +351,8 @@ This approach:
 * automatically creates the required Docker authentication format
 
 A Docker Hub Personal Access Token was used instead of the account password.
+
+![Dockerhub token](images/dockerhub_secret_token.png)
 
 Using a token is considered a security best practice because:
 
