@@ -30,41 +30,8 @@ The project covers:
 
 ## Architecture
 
-```text
-                           Internet
-                               |
-                               |
-                    AWS Load Balancer (ELB)
-                               |
-                               |
-                    NGINX Ingress Controller
-                               |z
-                               |
-                          Ingress Rule
-                               |
-                               |
-                    java-mysql-app-service
-                               |
-              --------------------------------
-              |                              |
-              |                              |
-      Java Application Pod          Java Application Pod
-            Replica 1                     Replica 2
-              |                              |
-              --------------------------------
-                               |
-                               |
-                     mysql-primary Service
-                               |
-                               |
-                         MySQL Primary
-                               |
-                    -------------------
-                    |                 |
-                    |                 |
-             MySQL Replica 1   MySQL Replica 2
 
-```
+![Architecture](images/architecture.png)
 
 ---
 
