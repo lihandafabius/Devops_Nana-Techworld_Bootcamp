@@ -541,9 +541,11 @@ Allow Kubernetes to authenticate against private container registries and pull p
 
 <br />
 
-phpMyAdmin was deployed to provide a graphical interface for managing MySQL.
+Although MySQL can be administered using command-line tools, managing databases through a graphical interface is often faster and more convenient.
 
-Because it is only used by administrators, a single replica was sufficient.
+To simplify database administration and verification during development, phpMyAdmin was deployed inside the Kubernetes cluster.
+
+Because phpMyAdmin is only used by administrators and not by application end users, high availability was not a requirement. Therefore, a single replica was sufficient.
 
 ### Deployment
 
@@ -603,23 +605,35 @@ spec:
     targetPort: 80
 ```
 
+### Verify Deployment
+
+![Phpmyadmin deployment](images/create_phpmyadmin.png)
+
+
 ### Key Concepts
 
 #### Service Discovery
 
-phpMyAdmin connects to MySQL using:
+phpMyAdmin connects to MySQL using the Kubernetes Service name:
 
 ```text
 mysql-primary
 ```
 
-which is resolved automatically by Kubernetes DNS.
+Kubernetes DNS automatically resolves this name to the correct database endpoint.
+
+#### Environment Variables
+
+The `PMA_HOST` and `PMA_PORT` environment variables tell phpMyAdmin which MySQL instance it should connect to.
 
 #### Internal Access
 
-The service remains internal to the cluster.
+The service was configured as a `ClusterIP`, making it accessible only from within the cluster.
+
+This prevents direct internet access to the database administration interface and reduces the attack surface of the environment.
 
 </details>
+
 
 ---
 
