@@ -510,6 +510,8 @@ Store non-sensitive configuration separately from application code.
 
 Store sensitive values such as passwords and credentials.
 
+> **Note:** In production environments, external secret management solutions such as AWS Secrets Manager or HashiCorp Vault are generally preferred over manually managing Kubernetes Secrets because they provide centralized management, automatic rotation, auditing, and enhanced security. Native Kubernetes Secrets are used in this project for simplicity.
+
 #### Image Pull Secrets
 
 Allow Kubernetes to authenticate against private container registries and pull protected images securely.
@@ -566,6 +568,24 @@ spec:
 
         - name: PMA_PORT
           value: "3306"
+
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
 ```
 
 ### Service
@@ -603,7 +623,17 @@ phpMyAdmin connects to MySQL using the Kubernetes Service name:
 mysql-primary
 ```
 
-Kubernetes DNS automatically resolves this name to the correct database endpoint.
+#### Liveness and Readiness Probes
+
+The phpMyAdmin deployment includes Kubernetes health probes to improve application reliability.
+
+* **Readiness Probe:** Ensures phpMyAdmin is fully initialized before it begins receiving traffic.
+* **Liveness Probe:** Monitors the running application and automatically restarts the container if it becomes unresponsive.
+
+Health probes help Kubernetes maintain application availability without requiring manual intervention.
+
+These probes become especially important in microservices architectures, where applications often consist of many independently deployed services. A readiness probe prevents traffic from being routed to services that are still starting up, while a liveness probe helps recover automatically from application failures, reducing downtime and improving the overall resilience of the system.
+
 
 #### Environment Variables
 
@@ -762,24 +792,6 @@ spec:
 
             port:
               number: 8080
-```
-
-### Traffic Flow
-
-```text
-Internet
-    |
-AWS Load Balancer
-    |
-NGINX Ingress Controller
-    |
-Ingress Rule
-    |
-java-mysql-app-service
-    |
-+-------------------+
-|                   |
-Pod 1          Pod 2
 ```
 
 ### Frontend Configuration
