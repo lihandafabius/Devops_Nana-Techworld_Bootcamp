@@ -1222,3 +1222,30 @@ service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
 This ensured AWS created a public Elastic Load Balancer (ELB).
 
 ---
+
+## Kubernetes Best Practices & Key Learnings
+
+* **Avoid `NodePort` in production** – Prefer an Ingress Controller or `LoadBalancer` to provide a single, secure entry point.
+
+* **Run multiple replicas** – Improves availability and enables rolling updates with minimal downtime.
+
+* **Use multiple worker nodes** – Eliminates a single point of failure and improves fault tolerance.
+
+* **Label Kubernetes resources** – Makes resources easier to organize, select, and manage.
+
+* **Scan container images** – Detect and remediate vulnerabilities in base images and dependencies before deployment.
+
+* **Avoid running containers as root** – Reduces the impact of a potential container compromise.
+
+* **Keep Kubernetes up to date** – Apply security patches, bug fixes, and new features through regular cluster upgrades.
+
+* **Pin container image versions** – Use explicit image tags instead of `latest` for predictable and reproducible deployments.
+
+* **Use health probes** – Configure liveness and readiness probes so Kubernetes can detect failures and route traffic only to healthy pods.
+
+* **Externalize secrets** – In production, prefer solutions such as AWS Secrets Manager or HashiCorp Vault over manually managed Kubernetes Secrets.
+
+* **Use persistent storage for stateful workloads** – Ensure application data survives pod restarts and node failures.
+
+* **Package applications with Helm** – Promote reusable, versioned, and consistent Kubernetes deployments across environments.
+
