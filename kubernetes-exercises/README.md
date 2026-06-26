@@ -46,17 +46,29 @@ Unlike a traditional Docker Compose deployment running on a single VM, Kubernete
 
 Using EKS Auto Mode simplified cluster management because AWS automatically provisions and manages the worker nodes required to run workloads.
 
+### Benefits of EKS Auto Mode
+
+In addition to managing the worker nodes, EKS Auto Mode provides several operational benefits:
+
+* Automatically selects the most appropriate EC2 instance types based on workload resource requirements.
+* Dynamically provisions and scales worker nodes as application demand changes.
+* Handles node lifecycle management, including provisioning, upgrades and replacement of unhealthy nodes.
+* Eliminates the need to manually create and manage node groups, reducing operational overhead.
+* Optimizes resource utilization to improve cost efficiency while maintaining application performance.
+
 ### Create IAM Roles
 
 Before creating the cluster, IAM roles were configured for both the EKS control plane and worker nodes.
 
 #### Cluster IAM Role
 
-The cluster IAM role allows the EKS control plane to interact with AWS services on behalf
+The cluster IAM role allows the EKS control plane to interact with AWS services on behalf of the Kubernetes cluster.
 
 ![AWS EKS Cluster](images/cluster.png)
 
-#### Verify cluster 
+#### Verify Cluster
+
+After the cluster was created, the EKS console was used to verify that the control plane and worker nodes were successfully provisioned.
 
 ![AWS EKS Cluster node](images/cluster-node.png)
 
@@ -81,7 +93,7 @@ If a pod crashes, Kubernetes automatically recreates it.
 
 #### Scheduling
 
-Pods are automatically distributed across available nodes.
+Pods are automatically distributed across available nodes to balance workloads and optimize resource utilization.
 
 </details>
 
