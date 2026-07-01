@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: nginx
+  name: nginx-dev
   namespace: dev
   labels:
     app: nginx
@@ -15,7 +15,7 @@ spec:
     metadata:
       labels:
         app: nginx
-        profile: fargate
+        profile: fargate # label to identify the pods that belong to this deployment
     spec:
       containers:
       - name: nginx
