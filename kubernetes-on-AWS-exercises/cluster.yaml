@@ -1,0 +1,28 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: test-cluster
+  region: eu-north-1
+  version: "1.35"
+
+iam:
+  withOIDC: true
+
+managedNodeGroups:
+  - name: cluster-nodes
+    instanceType: t3.small
+    desiredCapacity: 3
+    minSize: 2
+    maxSize: 5
+
+fargateProfiles:
+  - name: java-app-profile
+    selectors:
+      - namespace: java-app
+
+addons:
+  - name: aws-ebs-csi-driver
+    version: latest
+    attachPolicyARNs:
+      - arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
