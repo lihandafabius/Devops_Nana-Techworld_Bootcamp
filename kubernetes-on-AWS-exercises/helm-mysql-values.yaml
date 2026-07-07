@@ -1,0 +1,28 @@
+architecture: replication
+
+primary:
+  persistence:
+    storageClass: gp3-csi
+
+secondary:
+  replicaCount: 2
+
+  persistence:
+    storageClass: gp3-csi
+
+auth:
+  username: myuser
+  password: mypassword
+  rootPassword: rootpassword
+
+  replicationUser: replicator
+  replicationPassword: replica123
+
+global:
+  security:
+    allowInsecureImages: true
+
+image:
+  registry: docker.io
+  repository: bitnamilegacy/mysql
+  tag: latest
