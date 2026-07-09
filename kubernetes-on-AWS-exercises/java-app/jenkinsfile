@@ -2,13 +2,7 @@
 
 pipeline {
     agent any
-    // tools {
-    //     gradle 'gradle-9'
-    // }
-    // environment {
-    //     DOCKER_REPO_SERVER = 'lihanda'
-    //     DOCKER_REPO = "${DOCKER_REPO_SERVER}/demo-app"
-    // }
+
     stages {
         stage('Increment version') {
             steps {
