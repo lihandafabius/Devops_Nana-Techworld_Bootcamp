@@ -1,4 +1,4 @@
-FROM openjdk:21-jdk-slim
+FROM openjdk:21-slim
 EXPOSE 8080
 RUN mkdir /opt/app
 COPY app.jar /opt/app/app.jar
