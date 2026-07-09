@@ -11,7 +11,7 @@ pipeline {
 
                         def buildFile = readFile('build.gradle')
 
-                        def matcher = buildFile =~ /version\s+['"](\d+)\.(\d+)\.(\d+)['"]/
+                        def matcher = (buildFile =~ "version\\s+['\"](\\d+)\\.(\\d+)\\.(\\d+)['\"]")
 
                         def major = matcher.group(1).toInteger()
                         def minor = matcher.group(2).toInteger()
@@ -20,7 +20,7 @@ pipeline {
                         def newVersion = "${major}.${minor}.${patch}"
 
                         buildFile = buildFile.replaceFirst(
-                            /version\s+['"].*['"]/,
+                            "version\\s+['\"].*['\"]",
                             "version '${newVersion}'"
                         )
 
