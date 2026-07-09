@@ -9,14 +9,12 @@ pipeline {
                 script {
                     dir('kubernetes-on-AWS-exercises/java-app') {
 
-                        def buildFile = readFile('build.gradle')
+                        def props = readFile('gradle.properties')
 
-                        echo buildFile
-
-                        def matcher = buildFile =~ /version\s+'(\d+)\.(\d+)\.(\d+)'/
+                        def matcher = props =~ /version=(\d+)\.(\d+)\.(\d+)/
 
                         if (!matcher.find()) {
-                            error "Could not find version in build.gradle"
+                            error "Could not find version in gradle.properties"
                         }
 
                         def major = matcher.group(1).toInteger()
@@ -25,12 +23,12 @@ pipeline {
 
                         def newVersion = "${major}.${minor}.${patch}"
 
-                        buildFile = buildFile.replaceFirst(
-                            "version\\s+['\"].*['\"]",
-                            "version '${newVersion}'"
+                        props = props.replaceFirst(
+                            /version=\d+\.\d+\.\d+/,
+                            "version=${newVersion}"
                         )
 
-                        writeFile file: 'build.gradle', text: buildFile
+                        writeFile file: 'gradle.properties', text: props
 
                         env.IMAGE_NAME = "${newVersion}-${BUILD_NUMBER}"
 
