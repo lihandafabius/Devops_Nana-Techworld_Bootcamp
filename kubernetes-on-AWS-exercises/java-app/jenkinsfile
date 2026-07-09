@@ -13,7 +13,11 @@ pipeline {
 
                         echo buildFile
 
-                        def matcher = (buildFile =~ "version\\s+['\"](\\d+)\\.(\\d+)\\.(\\d+)['\"]")
+                        def matcher = buildFile =~ /version\s+'(\d+)\.(\d+)\.(\d+)'/
+
+                        if (!matcher.find()) {
+                            error "Could not find version in build.gradle"
+                        }
 
                         def major = matcher.group(1).toInteger()
                         def minor = matcher.group(2).toInteger()
