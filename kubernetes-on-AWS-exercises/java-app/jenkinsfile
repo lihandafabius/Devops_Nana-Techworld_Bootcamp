@@ -2,35 +2,53 @@
 
 pipeline {
     agent any
-    tools {
-        maven 'maven-9'
-    }
+    // tools {
+    //     gradle 'gradle-9'
+    // }
     // environment {
     //     DOCKER_REPO_SERVER = 'lihanda'
     //     DOCKER_REPO = "${DOCKER_REPO_SERVER}/demo-app"
     // }
     stages {
-        stage('increment version') {
+        stage('Increment version') {
             steps {
                 script {
-                    echo 'incrementing app version...'
-                    sh 'cd kubernetes-on-AWS-exercises/java-app && mvn build-helper:parse-version versions:set \
-                        -DnewVersion=\\\${parsedVersion.majorVersion}.\\\${parsedVersion.minorVersion}.\\\${parsedVersion.nextIncrementalVersion} \
-                        versions:commit'
-                    def matcher = readFile('kubernetes-on-AWS-exercises/java-app/pom.xml') =~ '<version>(.+)</version>'
-                    def version = matcher[0][1]
-                    env.IMAGE_NAME = "$version-$BUILD_NUMBER"
+                    dir('kubernetes-on-AWS-exercises/java-app') {
+
+                        def buildFile = readFile('build.gradle')
+
+                        def matcher = buildFile =~ /version\s+['"](\d+)\.(\d+)\.(\d+)['"]/
+
+                        def major = matcher.group(1).toInteger()
+                        def minor = matcher.group(2).toInteger()
+                        def patch = matcher.group(3).toInteger() + 1
+
+                        def newVersion = "${major}.${minor}.${patch}"
+
+                        buildFile = buildFile.replaceFirst(
+                            /version\s+['"].*['"]/,
+                            "version '${newVersion}'"
+                        )
+
+                        writeFile file: 'build.gradle', text: buildFile
+
+                        env.IMAGE_NAME = "${newVersion}-${BUILD_NUMBER}"
+
+                        echo "New version: ${newVersion}"
+                    }
                 }
             }
         }
+
         stage('build app') {
             steps {
-                script {
-                    echo 'building the application...'
-                    sh 'cd kubernetes-on-AWS-exercises/java-app && ./gradlew clean build'
+                dir('kubernetes-on-AWS-exercises/java-app') {
+                    sh 'chmod +x gradlew'
+                    sh './gradlew clean build'
                 }
             }
         }
+
         stage('build image') {
             steps {
                 script {
@@ -43,6 +61,7 @@ pipeline {
                 }
             }
         }
+
         stage('deploy') {
             environment {
                 AWS_ACCESS_KEY_ID = credentials('jenkins_aws_access_key_id')
