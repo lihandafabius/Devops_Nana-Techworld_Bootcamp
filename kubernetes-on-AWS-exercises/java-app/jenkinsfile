@@ -11,6 +11,8 @@ pipeline {
 
                         def buildFile = readFile('build.gradle')
 
+                        echo buildFile
+
                         def matcher = (buildFile =~ "version\\s+['\"](\\d+)\\.(\\d+)\\.(\\d+)['\"]")
 
                         def major = matcher.group(1).toInteger()
