@@ -42,7 +42,7 @@ pipeline {
                 dir('kubernetes-on-AWS-exercises/java-app') {
                     sh 'chmod +x gradlew'
                     sh './gradlew clean build'
-                    sh 'cp build/libs/*.jar ./app.jar'
+                    sh 'cp build/libs/*[0-9].jar ./app.jar'
                 }
             }
         }
