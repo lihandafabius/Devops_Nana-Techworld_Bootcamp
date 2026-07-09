@@ -6,32 +6,31 @@ pipeline {
     stages {
         stage('Increment version') {
             steps {
-                script {
-                    dir('kubernetes-on-AWS-exercises/java-app') {
+                dir('kubernetes-on-AWS-exercises/java-app') {
+                    script {
 
                         def props = readFile('gradle.properties')
 
-                        def matcher = props =~ /version=(\d+)\.(\d+)\.(\d+)/
+                        def currentVersion = props
+                                .split("=")[1]
+                                .trim()
 
-                        if (!matcher.find()) {
-                            error "Could not find version in gradle.properties"
-                        }
+                        def parts = currentVersion.tokenize('.')
 
-                        def major = matcher.group(1).toInteger()
-                        def minor = matcher.group(2).toInteger()
-                        def patch = matcher.group(3).toInteger() + 1
+                        def major = parts[0].toInteger()
+                        def minor = parts[1].toInteger()
+                        def patch = parts[2].toInteger() + 1
 
                         def newVersion = "${major}.${minor}.${patch}"
 
-                        props = props.replaceFirst(
-                            /version=\d+\.\d+\.\d+/,
-                            "version=${newVersion}"
+                        writeFile(
+                            file: 'gradle.properties',
+                            text: "version=${newVersion}\n"
                         )
-
-                        writeFile file: 'gradle.properties', text: props
 
                         env.IMAGE_NAME = "${newVersion}-${BUILD_NUMBER}"
 
+                        echo "Old version: ${currentVersion}"
                         echo "New version: ${newVersion}"
                     }
                 }
