@@ -3,6 +3,11 @@
 pipeline {
     agent any
 
+    environment {
+        ECR_REGISTRY = 'java-maven-app'
+        REGISTRY_SERVER = '480007295919.dkr.ecr.eu-north-1.amazonaws.com'
+    }
+
     stages {
         stage('Increment version') {
             steps {
@@ -50,10 +55,10 @@ pipeline {
             steps {
                 script {
                     echo "building the docker image..."
-                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', passwordVariable: 'PASS', usernameVariable: 'USER')]){
-                        sh "cd kubernetes-on-AWS-exercises/java-app && docker build -t lihanda/demo-app:${IMAGE_NAME} ."
-                        sh 'echo "$PASS" | docker login -u "$USER" --password-stdin'
-                        sh "docker push lihanda/demo-app:${IMAGE_NAME}"
+                    withCredentials([usernamePassword(credentialsId: 'ecr-credentials', passwordVariable: 'PASS', usernameVariable: 'USER')]){
+                        sh "cd kubernetes-on-AWS-exercises/java-app && docker build -t ${REGISTRY_SERVER}/${ECR_REGISTRY}:${IMAGE_NAME} ."
+                        sh 'echo "$PASS" | docker login -u "$USER" --password-stdin ${REGISTRY_SERVER}'
+                        sh "docker push ${REGISTRY_SERVER}/${ECR_REGISTRY}:${IMAGE_NAME}"
                     }
                 }
             }
