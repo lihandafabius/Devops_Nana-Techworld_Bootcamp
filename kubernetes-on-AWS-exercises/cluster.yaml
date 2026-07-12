@@ -12,9 +12,9 @@ iam:
 managedNodeGroups:
   - name: cluster-nodes
     instanceType: t3.small
-    desiredCapacity: 1
-    minSize: 1
-    maxSize: 3
+    desiredCapacity: 3
+    minSize: 2
+    maxSize: 5
 
 fargateProfiles:
   - name: java-app-profile
