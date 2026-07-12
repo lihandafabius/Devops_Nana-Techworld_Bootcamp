@@ -4,7 +4,7 @@ kind: ClusterConfig
 metadata:
   name: aws-managed-cluster
   region: eu-north-1
-  version: "1.35"
+  version: "1.36"
 
 iam:
   withOIDC: true
@@ -12,9 +12,9 @@ iam:
 managedNodeGroups:
   - name: cluster-nodes
     instanceType: t3.small
-    desiredCapacity: 3
-    minSize: 2
-    maxSize: 5
+    desiredCapacity: 1
+    minSize: 1
+    maxSize: 3
 
 fargateProfiles:
   - name: java-app-profile
