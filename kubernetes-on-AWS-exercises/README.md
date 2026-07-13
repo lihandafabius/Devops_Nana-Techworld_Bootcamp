@@ -44,6 +44,6 @@ Rather than focusing solely on the final deployment, this documentation also cov
 ## Architecture
 
 
-![Architecture](images/Achitecture.png)
+![Architecture](images/Architecture.png)
 
 ---
