@@ -38,3 +38,12 @@ Throughout this project the following technologies and concepts are implemented:
 - Applying Kubernetes deployment best practices and production considerations
 
 Rather than focusing solely on the final deployment, this documentation also covers the architectural decisions, implementation process, real-world troubleshooting, lessons learned, and production recommendations encountered throughout the project.
+
+---
+
+## Architecture
+
+
+![Architecture](images/Achitecture.png)
+
+---
