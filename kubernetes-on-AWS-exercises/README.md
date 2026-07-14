@@ -131,6 +131,10 @@ The configuration creates:
 - IAM OIDC integration for secure service account authentication.
 - The Amazon EBS CSI Driver for dynamic persistent volume provisioning.
 
+### verification
+
+![Verify cluster](images/verify_cluster.png)
+
 </details>
 
 ---
