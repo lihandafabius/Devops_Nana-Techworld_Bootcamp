@@ -138,3 +138,143 @@ The configuration creates:
 </details>
 
 ---
+
+<details>
+<summary>Exercise 2: Deploy MySQL and phpMyAdmin</summary>
+
+<br />
+
+The database layer was deployed on the managed EC2 worker nodes using the **Bitnami MySQL Helm Chart** configured in **replication mode**. Running MySQL with one primary instance and two replicas improves availability by ensuring database replicas remain available if the primary instance becomes unavailable.
+
+The deployment was configured using the following Helm values file:
+
+```yaml
+architecture: replication
+
+primary:
+  persistence:
+    storageClass: gp2
+
+secondary:
+  replicaCount: 2
+  persistence:
+    storageClass: gp2
+
+auth:
+  username: myuser
+  password: mypassword
+  rootPassword: rootpassword
+
+  replicationUser: replicator
+  replicationPassword: replica123
+
+global:
+  security:
+    allowInsecureImages: true
+
+image:
+  registry: docker.io
+  repository: bitnamilegacy/mysql
+  tag: latest
+```
+
+### Why Helm?
+
+Although MySQL could be deployed by manually creating Kubernetes resources, using the Bitnami Helm chart greatly simplifies the process.
+
+The chart automatically creates and configures:
+
+- StatefulSets
+- Services
+- PersistentVolumeClaims
+- MySQL replication
+- Database initialization
+
+This reduces the amount of YAML that needs to be maintained while following Kubernetes best practices.
+
+### Verification
+
+![Deploy Mysql](images/deploy_mysql.png)
+
+![Verify Mysql pods](images/verify_mysql_pods.png)
+
+
+### Deploy phpMyAdmin
+
+After MySQL was deployed, **phpMyAdmin** was deployed as a standard Kubernetes Deployment to provide a web-based interface for managing the database.
+
+The application connects directly to the MySQL primary instance using the `mysql-primary` service created by the Helm chart.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: phpmyadmin-deployment
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: phpmyadmin
+
+  template:
+    metadata:
+      labels:
+        app: phpmyadmin
+
+    spec:
+      containers:
+      - name: phpmyadmin
+        image: phpmyadmin:latest
+
+        ports:
+        - containerPort: 80
+
+        env:
+        - name: PMA_HOST
+          value: mysql-primary
+
+        - name: PMA_PORT
+          value: "3306"
+
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 20
+          periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: phpmyadmin-service
+
+spec:
+  type: ClusterIP
+
+  selector:
+    app: phpmyadmin
+
+  ports:
+  - port: 80
+    targetPort: 80
+```
+
+### Verification
+
+![Deploy Phpmyadmin](images/phpmyadmin-verify.png)
+
+</details>
+
+---
