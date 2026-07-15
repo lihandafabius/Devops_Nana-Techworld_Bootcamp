@@ -138,3 +138,317 @@ The configuration creates:
 </details>
 
 ---
+
+<details>
+<summary>Exercise 2: Deploy MySQL and phpMyAdmin</summary>
+
+<br />
+
+The database layer was deployed on the managed EC2 worker nodes using the **Bitnami MySQL Helm Chart** configured in **replication mode**. Running MySQL with one primary instance and two replicas improves availability by ensuring database replicas remain available if the primary instance becomes unavailable.
+
+The deployment was configured using the following Helm values file:
+
+```yaml
+architecture: replication
+
+primary:
+  persistence:
+    storageClass: gp2
+
+secondary:
+  replicaCount: 2
+  persistence:
+    storageClass: gp2
+
+auth:
+  username: myuser
+  password: mypassword
+  rootPassword: rootpassword
+
+  replicationUser: replicator
+  replicationPassword: replica123
+
+global:
+  security:
+    allowInsecureImages: true
+
+image:
+  registry: docker.io
+  repository: bitnamilegacy/mysql
+  tag: latest
+```
+
+### Why Helm?
+
+Although MySQL could be deployed by manually creating Kubernetes resources, using the Bitnami Helm chart greatly simplifies the process.
+
+The chart automatically creates and configures:
+
+- StatefulSets
+- Services
+- PersistentVolumeClaims
+- MySQL replication
+- Database initialization
+
+This reduces the amount of YAML that needs to be maintained while following Kubernetes best practices.
+
+### Verification
+
+![Deploy Mysql](images/deploy_mysql.png)
+
+![Verify Mysql pods](images/verify_mysql_pods.png)
+
+
+### Deploy phpMyAdmin
+
+After MySQL was deployed, **phpMyAdmin** was deployed as a standard Kubernetes Deployment to provide a web-based interface for managing the database.
+
+The application connects directly to the MySQL primary instance using the `mysql-primary` service created by the Helm chart.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: phpmyadmin-deployment
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: phpmyadmin
+
+  template:
+    metadata:
+      labels:
+        app: phpmyadmin
+
+    spec:
+      containers:
+      - name: phpmyadmin
+        image: phpmyadmin:latest
+
+        ports:
+        - containerPort: 80
+
+        env:
+        - name: PMA_HOST
+          value: mysql-primary
+
+        - name: PMA_PORT
+          value: "3306"
+
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 20
+          periodSeconds: 10
+
+---
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: phpmyadmin-service
+
+spec:
+  type: ClusterIP
+
+  selector:
+    app: phpmyadmin
+
+  ports:
+  - port: 80
+    targetPort: 80
+```
+
+### Verification
+
+![Deploy Phpmyadmin](images/phpmyadmin-verify.png)
+
+</details>
+
+---
+
+<details>
+<summary>Exercise 3: Deploy the Java Application</summary>
+
+<br />
+
+The Java Spring Boot application was deployed to the **AWS Fargate Profile** created for the `java-app` namespace. Running the application on Fargate eliminates the need to provision or manage EC2 instances for the application tier, allowing AWS to manage the underlying compute infrastructure.
+
+### Create the Application Namespace
+
+A dedicated namespace was created to logically isolate the application resources from the rest of the cluster.
+
+```bash
+kubectl create namespace java-app
+```
+
+### Create the Image Pull Secret
+
+Since the application image was hosted on Docker Hub, a registry secret was created to allow Kubernetes to authenticate and pull the container image.
+
+```bash
+kubectl create secret docker-registry my-registry-key -n java-app \
+  --docker-server=https://index.docker.io/v1/ \
+  --docker-username=lihanda \
+  --docker-password=...
+```
+
+### Configure the Application
+
+Application configuration was separated from the container image by using a ConfigMap for non-sensitive values and a Secret for database credentials.
+
+#### ConfigMap
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config
+  namespace: java-app
+data:
+  DB_SERVER: "mysql-primary.default.svc.cluster.local"
+  DB_NAME: "my_database"
+```
+
+#### Secret
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+  namespace: java-app
+type: Opaque
+data:
+  DB_PWD: bXlwYXNzd29yZA==
+  DB_USER: bXl1c2Vy
+```
+
+### Deploy the Application
+
+The application was deployed with **three replicas** to improve availability and fault tolerance. A `ClusterIP` Service was created to expose the application internally within the cluster.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: $APP_NAME
+  namespace: java-app
+
+spec:
+  replicas: 3
+
+  selector:
+    matchLabels:
+      app: $APP_NAME
+
+  template:
+    metadata:
+      labels:
+        app: $APP_NAME
+
+    spec:
+      imagePullSecrets:
+      - name: my-registry-key
+
+      containers:
+      - name: $APP_NAME
+
+        image: lihanda/demo-app:$IMAGE_NAME
+
+        imagePullPolicy: Always
+
+        ports:
+        - containerPort: 8080
+
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+
+          limits:
+            cpu: "1"
+            memory: "500Mi"
+
+        env:
+        - name: DB_SERVER
+          valueFrom:
+            configMapKeyRef:
+              name: mysql-config
+              key: DB_SERVER
+
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: mysql-config
+              key: DB_NAME
+
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: DB_USER
+
+        - name: DB_PWD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: DB_PWD
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: $APP_NAME-service
+  namespace: java-app
+
+spec:
+  type: ClusterIP
+
+  selector:
+    app: $APP_NAME
+
+  ports:
+  - port: 8080
+    targetPort: 8080
+```
+
+### Resource Management
+
+Resource requests and limits were defined to provide predictable scheduling and prevent a single container from consuming excessive cluster resources.
+
+```yaml
+resources:
+  requests:
+    cpu: "250m"
+    memory: "256Mi"
+
+  limits:
+    cpu: "1"
+    memory: "500Mi"
+```
+
+Defining **requests** allows Kubernetes to reserve the minimum resources required by the application when scheduling pods. **Limits** define the maximum amount of CPU and memory a container can consume.
+
+Without resource requests, pods are assigned the **BestEffort** Quality of Service (QoS) class, making them the first candidates for eviction when a node experiences resource pressure. By defining requests, the application receives a **Burstable** QoS class, improving scheduling decisions and overall application stability.
+
+For more information, see:
+
+- Kubernetes Resource Management: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+- Pod Quality of Service Classes: https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/
+
+</details>
+
+---
