@@ -278,3 +278,177 @@ spec:
 </details>
 
 ---
+
+<details>
+<summary>Exercise 3: Deploy the Java Application</summary>
+
+<br />
+
+The Java Spring Boot application was deployed to the **AWS Fargate Profile** created for the `java-app` namespace. Running the application on Fargate eliminates the need to provision or manage EC2 instances for the application tier, allowing AWS to manage the underlying compute infrastructure.
+
+### Create the Application Namespace
+
+A dedicated namespace was created to logically isolate the application resources from the rest of the cluster.
+
+```bash
+kubectl create namespace java-app
+```
+
+### Create the Image Pull Secret
+
+Since the application image was hosted on Docker Hub, a registry secret was created to allow Kubernetes to authenticate and pull the container image.
+
+```bash
+kubectl create secret docker-registry my-registry-key -n java-app \
+  --docker-server=https://index.docker.io/v1/ \
+  --docker-username=lihanda \
+  --docker-password=...
+```
+
+### Configure the Application
+
+Application configuration was separated from the container image by using a ConfigMap for non-sensitive values and a Secret for database credentials.
+
+#### ConfigMap
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config
+  namespace: java-app
+data:
+  DB_SERVER: "mysql-primary.default.svc.cluster.local"
+  DB_NAME: "my_database"
+```
+
+#### Secret
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+  namespace: java-app
+type: Opaque
+data:
+  DB_PWD: bXlwYXNzd29yZA==
+  DB_USER: bXl1c2Vy
+```
+
+### Deploy the Application
+
+The application was deployed with **three replicas** to improve availability and fault tolerance. A `ClusterIP` Service was created to expose the application internally within the cluster.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: $APP_NAME
+  namespace: java-app
+
+spec:
+  replicas: 3
+
+  selector:
+    matchLabels:
+      app: $APP_NAME
+
+  template:
+    metadata:
+      labels:
+        app: $APP_NAME
+
+    spec:
+      imagePullSecrets:
+      - name: my-registry-key
+
+      containers:
+      - name: $APP_NAME
+
+        image: lihanda/demo-app:$IMAGE_NAME
+
+        imagePullPolicy: Always
+
+        ports:
+        - containerPort: 8080
+
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+
+          limits:
+            cpu: "1"
+            memory: "500Mi"
+
+        env:
+        - name: DB_SERVER
+          valueFrom:
+            configMapKeyRef:
+              name: mysql-config
+              key: DB_SERVER
+
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: mysql-config
+              key: DB_NAME
+
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: DB_USER
+
+        - name: DB_PWD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: DB_PWD
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: $APP_NAME-service
+  namespace: java-app
+
+spec:
+  type: ClusterIP
+
+  selector:
+    app: $APP_NAME
+
+  ports:
+  - port: 8080
+    targetPort: 8080
+```
+
+### Resource Management
+
+Resource requests and limits were defined to provide predictable scheduling and prevent a single container from consuming excessive cluster resources.
+
+```yaml
+resources:
+  requests:
+    cpu: "250m"
+    memory: "256Mi"
+
+  limits:
+    cpu: "1"
+    memory: "500Mi"
+```
+
+Defining **requests** allows Kubernetes to reserve the minimum resources required by the application when scheduling pods. **Limits** define the maximum amount of CPU and memory a container can consume.
+
+Without resource requests, pods are assigned the **BestEffort** Quality of Service (QoS) class, making them the first candidates for eviction when a node experiences resource pressure. By defining requests, the application receives a **Burstable** QoS class, improving scheduling decisions and overall application stability.
+
+For more information, see:
+
+- Kubernetes Resource Management: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+- Pod Quality of Service Classes: https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/
+
+</details>
+
+---
