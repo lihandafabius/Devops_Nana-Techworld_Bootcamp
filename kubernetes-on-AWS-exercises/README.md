@@ -301,7 +301,7 @@ Since the application image was hosted on Docker Hub, a registry secret was crea
 ```bash
 kubectl create secret docker-registry my-registry-key -n java-app \
   --docker-server=https://index.docker.io/v1/ \
-  --docker-username=lihanda \
+  --docker-username=xxx \
   --docker-password=...
 ```
 
@@ -322,6 +322,8 @@ data:
   DB_NAME: "my_database"
 ```
 
+> **Note:** `mysql-primary.default.svc.cluster.local` is the Kubernetes DNS name of the MySQL Service. Kubernetes automatically resolves this name to the service's IP address, enabling reliable communication between the Java application running in the `java-app` namespace and the MySQL database in the `default` namespace.
+
 #### Secret
 
 ```yaml
@@ -332,9 +334,11 @@ metadata:
   namespace: java-app
 type: Opaque
 data:
-  DB_PWD: bXlwYXNzd29yZA==
-  DB_USER: bXl1c2Vy
+  DB_PWD: xxx
+  DB_USER: xxx
 ```
+
+![Verify Secrets ](images/docker_pass.png)
 
 ### Deploy the Application
 
@@ -344,7 +348,7 @@ The application was deployed with **three replicas** to improve availability and
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: $APP_NAME
+  name: java-mysql-app
   namespace: java-app
 
 spec:
@@ -352,21 +356,21 @@ spec:
 
   selector:
     matchLabels:
-      app: $APP_NAME
+      app: java-mysql-app
 
   template:
     metadata:
       labels:
-        app: $APP_NAME
+        app: java-mysql-app
 
     spec:
       imagePullSecrets:
       - name: my-registry-key
 
       containers:
-      - name: $APP_NAME
+      - name: java-mysql-app
 
-        image: lihanda/demo-app:$IMAGE_NAME
+        image: lihanda/demo-app:java-app-1.0
 
         imagePullPolicy: Always
 
@@ -411,14 +415,14 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: $APP_NAME-service
+  name: java-mysql-app-service
   namespace: java-app
 
 spec:
   type: ClusterIP
 
   selector:
-    app: $APP_NAME
+    app: java-mysql-app
 
   ports:
   - port: 8080
@@ -448,6 +452,15 @@ For more information, see:
 
 - Kubernetes Resource Management: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 - Pod Quality of Service Classes: https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/
+
+### verification
+
+
+![Deploy java-app](images/verify_java_dockerhub_app.png)
+
+
+![Verify Fargate](images/fargate_pod.png)
+
 
 </details>
 
