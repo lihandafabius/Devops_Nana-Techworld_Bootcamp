@@ -75,7 +75,7 @@ A **Fargate Profile** was configured for the `java-app` namespace.
 
 Fargate allows Kubernetes pods to run without provisioning or managing EC2 instances. Instead of maintaining worker nodes, AWS automatically launches the compute resources required for each pod, allowing teams to focus on application deployment rather than infrastructure management.
 
-> **Note:** Unlike EC2 worker nodes, where multiple pods can be scheduled onto a single instance, **each Fargate pod runs inside its own virtual machin**.v 
+> **Note:** Unlike EC2 worker nodes, where multiple pods can be scheduled onto a single instance, **each Fargate pod runs inside its own virtual machine**
 
 ### Fargate Limitations
 
