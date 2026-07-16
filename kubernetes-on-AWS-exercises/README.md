@@ -562,6 +562,8 @@ During deployment, the placeholders inside the Kubernetes manifest are automatic
 envsubst < application-deployment.yaml | kubectl apply -f -
 ```
 
+> **Note:** The CI/CD pipeline applies only the application deployment manifest (which also defines the Service). Cluster resources such as the Namespace, ConfigMaps, Secrets, and Docker registry credentials are considered infrastructure components and were created during the initial environment setup. Separating infrastructure provisioning from application deployment results in a simpler, faster, and more maintainable deployment pipeline.
+
 ### Jenkins Pipeline
 
 The pipeline automates the complete deployment workflow by:
