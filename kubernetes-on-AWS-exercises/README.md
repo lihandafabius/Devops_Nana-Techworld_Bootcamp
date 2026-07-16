@@ -574,6 +574,102 @@ The pipeline automates the complete deployment workflow by:
 - Deploying the updated image to Kubernetes
 - Committing the version change back to GitHub
 
+### Jenkinsfile
+```groovy
+#!/usr/bin/env groovy
+
+pipeline {
+    agent any
+
+    stages {
+        stage('Increment version') {
+            steps {
+                dir('kubernetes-on-AWS-exercises/java-app') {
+                    script {
+
+                        def props = readFile('gradle.properties')
+
+                        def currentVersion = props
+                                .split("=")[1]
+                                .trim()
+
+                        def parts = currentVersion.tokenize('.')
+
+                        def major = parts[0].toInteger()
+                        def minor = parts[1].toInteger()
+                        def patch = parts[2].toInteger() + 1
+
+                        def newVersion = "${major}.${minor}.${patch}"
+
+                        writeFile(
+                            file: 'gradle.properties',
+                            text: "version=${newVersion}\n"
+                        )
+
+                        env.IMAGE_NAME = "${newVersion}-${BUILD_NUMBER}"
+
+                        echo "Old version: ${currentVersion}"
+                        echo "New version: ${newVersion}"
+                    }
+                }
+            }
+        }
+
+        stage('build app') {
+            steps {
+                dir('kubernetes-on-AWS-exercises/java-app') {
+                    sh 'chmod +x gradlew'
+                    sh './gradlew clean build'
+                }
+            }
+        }
+
+        stage('build image') {
+            steps {
+                script {
+                    echo "building the docker image..."
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', passwordVariable: 'PASS', usernameVariable: 'USER')]){
+                        sh "cd kubernetes-on-AWS-exercises/java-app && docker build -t lihanda/demo-app:${IMAGE_NAME} ."
+                        sh 'echo "$PASS" | docker login -u "$USER" --password-stdin'
+                        sh "docker push lihanda/demo-app:${IMAGE_NAME}"
+                    }
+                }
+            }
+        }
+
+        stage('deploy') {
+            environment {
+                AWS_ACCESS_KEY_ID = credentials('jenkins_aws_access_key_id')
+                AWS_SECRET_ACCESS_KEY = credentials('jenkins_aws_secret_access_key')
+                APP_NAME = 'java-mysql-app'
+            }
+            steps {
+                script {
+                   echo 'deploying docker image...'
+                   sh 'envsubst < kubernetes-on-AWS-exercises/application-deployment.yaml | kubectl apply -f -'
+                }
+            }
+        }
+        stage('Commit version update') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                        sh 'git config --global user.email "jenkins@example.com"'
+                        sh 'git config --global user.name "jenkins"'
+
+                        sh "git remote set-url origin https://${USER}:${PASS}@github.com/lihandafabius/Devops_Nana-Techworld_Bootcamp.git"
+                        sh 'git add .'
+                        sh 'git commit -m "ci: version bump"'
+                        sh 'git push origin HEAD:main'
+                    }
+                }
+            }
+        }
+    }
+}
+
+```
+
 ### Automatic Versioning
 
 Application versions are managed using the `gradle.properties` file.
