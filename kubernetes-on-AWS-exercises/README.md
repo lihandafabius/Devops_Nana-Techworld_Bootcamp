@@ -679,13 +679,6 @@ version=1.0.0
 ```
 
 During every pipeline execution, the patch version is automatically incremented and combined with the Jenkins build number to generate a unique Docker image tag.
-
-Example:
-
-```
-1.0.7-42
-```
-
 This ensures every deployment is traceable and avoids overwriting previously published container images.
 
 ### Docker Image
@@ -706,9 +699,13 @@ ENTRYPOINT ["java", "-jar", "app.jar"]
 
 ### Jenkins Credentials
 
-Sensitive information such as Docker Hub credentials, GitHub credentials and AWS access keys were stored securely in the Jenkins Credentials Store rather than being hardcoded into the pipeline.
+Sensitive information such as Docker Hub credentials, GitHub credentials, and AWS access keys were stored securely in the Jenkins Credentials Store rather than being hardcoded into the pipeline.
 
 The pipeline retrieves these credentials dynamically during execution, following CI/CD security best practices.
+
+![Jenkins Credentials](images/credentials.png)
+
+> **Note:** While the Jenkins Credentials Store is suitable for small projects and learning environments, production environments typically use dedicated secrets management solutions such as **AWS Secrets Manager** or **HashiCorp Vault**. These services provide centralized secret management, automatic credential rotation, fine-grained access control, auditing, and tighter integration with cloud-native workloads.
 
 </details>
 
