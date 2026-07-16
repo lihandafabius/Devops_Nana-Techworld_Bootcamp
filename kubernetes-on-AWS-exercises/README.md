@@ -533,7 +533,7 @@ After installation, AWS credentials and the cluster region are configured using 
 
 Both approaches provide secure authentication to the EKS cluster. This project uses **aws-iam-authenticator**.
 
-![kubectl IAM Verification](images/kubectl_iam_verification.png)
+![kubectl IAM Verification](images/tools.png)
 
 ### Parameterizing the Kubernetes Deployment
 
