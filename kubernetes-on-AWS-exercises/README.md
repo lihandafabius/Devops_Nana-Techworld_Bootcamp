@@ -533,6 +533,8 @@ After installation, AWS credentials and the cluster region are configured using 
 
 Both approaches provide secure authentication to the EKS cluster. This project uses **aws-iam-authenticator**.
 
+![kubectl IAM Verification](images/kubectl_iam_verification.png)
+
 ### Parameterizing the Kubernetes Deployment
 
 To allow Jenkins to deploy different application versions automatically, the deployment manifest was parameterized.
