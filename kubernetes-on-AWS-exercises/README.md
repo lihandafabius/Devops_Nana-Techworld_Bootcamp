@@ -465,3 +465,153 @@ For more information, see:
 </details>
 
 ---
+
+<details>
+<summary>Exercise 4: Automate Deployment with Jenkins</summary>
+
+<br />
+
+To eliminate manual deployments, the existing Jenkins server running inside an Amazon EC2 instance was configured to automatically deploy new application versions to the Amazon EKS cluster whenever changes were pushed to the repository.
+
+The pipeline performs the following tasks:
+
+- Builds the Java application
+- Creates a versioned Docker image
+- Pushes the image to Docker Hub
+- Updates the Kubernetes deployment
+- Commits the new application version back to the repository
+
+### Preparing the Jenkins Environment
+
+Since Jenkins was running inside a Docker container, the required Kubernetes tools first had to be installed.
+
+#### Install kubectl
+
+```bash
+curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+
+chmod +x kubectl
+mv kubectl /usr/local/bin/
+```
+
+### Authenticating Jenkins with Amazon EKS
+
+Two authentication approaches can be used to allow Jenkins to communicate with the Kubernetes cluster.
+
+#### Option 1: aws-iam-authenticator (Used)
+
+The first approach uses **aws-iam-authenticator**, allowing `kubectl` to request temporary authentication tokens when communicating with the EKS API server.
+
+```bash
+curl -Lo aws-iam-authenticator \
+https://github.com/kubernetes-sigs/aws-iam-authenticator/releases/download/v0.6.11/aws-iam-authenticator_0.6.11_linux_amd64
+
+chmod +x aws-iam-authenticator
+mv aws-iam-authenticator /usr/local/bin/
+```
+
+A Kubernetes configuration file was then created on the EC2 instance and copied into the Jenkins container.
+
+```bash
+docker cp config jenkins:/var/jenkins_home/.kube/
+```
+
+The kubeconfig references `aws-iam-authenticator` as an **exec plugin**, allowing Kubernetes to obtain authentication tokens whenever `kubectl` communicates with the cluster.
+
+#### Option 2: AWS CLI
+
+An alternative approach is to install the AWS CLI inside the Jenkins container.
+
+```bash
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
+
+unzip awscliv2.zip
+./aws/install
+```
+
+After installation, AWS credentials and the cluster region are configured using `aws configure`, after which the kubeconfig can be generated automatically.
+
+Both approaches provide secure authentication to the EKS cluster. This project uses **aws-iam-authenticator**.
+
+### Parameterizing the Kubernetes Deployment
+
+To allow Jenkins to deploy different application versions automatically, the deployment manifest was parameterized.
+
+For example, placeholders such as:
+
+```yaml
+metadata:
+  name: $APP_NAME
+
+image: lihanda/demo-app:$IMAGE_NAME
+```
+
+are replaced during the pipeline using environment variables, allowing the same deployment manifest to be reused across builds.
+
+### Environment Variable Substitution
+
+The Jenkins container was configured with **envsubst** from the `gettext-base` package.
+
+```bash
+apt-get install -y gettext-base
+```
+
+During deployment, the placeholders inside the Kubernetes manifest are automatically replaced before being applied to the cluster.
+
+```bash
+envsubst < application-deployment.yaml | kubectl apply -f -
+```
+
+### Jenkins Pipeline
+
+The pipeline automates the complete deployment workflow by:
+
+- Incrementing the application version
+- Building the Spring Boot application using Gradle
+- Building and pushing a Docker image
+- Deploying the updated image to Kubernetes
+- Committing the version change back to GitHub
+
+### Automatic Versioning
+
+Application versions are managed using the `gradle.properties` file.
+
+```properties
+version=1.0.0
+```
+
+During every pipeline execution, the patch version is automatically incremented and combined with the Jenkins build number to generate a unique Docker image tag.
+
+Example:
+
+```
+1.0.7-42
+```
+
+This ensures every deployment is traceable and avoids overwriting previously published container images.
+
+### Docker Image
+
+The application is packaged into a lightweight container using the following Dockerfile.
+
+```dockerfile
+FROM eclipse-temurin:21-jre-jammy
+
+WORKDIR /opt/app
+
+COPY build/libs/java-app.jar app.jar
+
+EXPOSE 8080
+
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+### Jenkins Credentials
+
+Sensitive information such as Docker Hub credentials, GitHub credentials and AWS access keys were stored securely in the Jenkins Credentials Store rather than being hardcoded into the pipeline.
+
+The pipeline retrieves these credentials dynamically during execution, following CI/CD security best practices.
+
+</details>
+
+---
