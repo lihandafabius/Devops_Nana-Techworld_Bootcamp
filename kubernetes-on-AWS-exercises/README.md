@@ -807,7 +807,7 @@ Instead of pushing images to Docker Hub, the pipeline now builds and pushes imag
 ```groovy
 environment {
     ECR_REGISTRY = "java-maven-app"
-    REGISTRY_SERVER = "480007295919.dkr.ecr.eu-north-1.amazonaws.com"
+    REGISTRY_SERVER = "<Account id>.dkr.ecr.eu-north-1.amazonaws.com"
 }
 ```
 
@@ -820,6 +820,9 @@ docker push ${REGISTRY_SERVER}/${ECR_REGISTRY}:${IMAGE_NAME}
 ```
 
 The remainder of the pipeline remained unchanged, including automatic versioning, application deployment, and committing version updates back to GitHub.
+
+![Pipeline pass](images/pipeline_pass.png)
+
 
 ### Why Amazon ECR?
 
