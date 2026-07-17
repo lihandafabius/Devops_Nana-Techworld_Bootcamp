@@ -516,6 +516,34 @@ A Kubernetes configuration file was then created on the EC2 instance and copied 
 docker cp config jenkins:/var/jenkins_home/.kube/
 ```
 
+```yaml
+
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    certificate-authority-data: <certificate authority>
+    server: <API server endpoint>
+  name: kubernetes
+contexts:
+- context:
+    cluster: kubernetes
+    user: aws
+  name: aws
+current-context: aws
+users:
+- name: aws
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1beta1
+      command: /usr/local/bin/aws-iam-authenticator
+      args:
+        - "token"
+        - "-i"
+        - <"cluster-name">
+
+```
+
 The kubeconfig references `aws-iam-authenticator` as an **exec plugin**, allowing Kubernetes to obtain authentication tokens whenever `kubectl` communicates with the cluster.
 
 #### Option 2: AWS CLI
@@ -708,6 +736,44 @@ The pipeline retrieves these credentials dynamically during execution, following
 ![Jenkins Credentials](images/credentials.png)
 
 > **Note:** While the Jenkins Credentials Store is suitable for small projects and learning environments, production environments typically use dedicated secrets management solutions such as **AWS Secrets Manager** or **HashiCorp Vault**. These services provide centralized secret management, automatic credential rotation, fine-grained access control, auditing, and tighter integration with cloud-native workloads.
+
+
+### Configure Webhooks
+
+To enable automatic pipeline execution whenever changes are pushed to the source code repository, a webhook was configured between the Git repository and Jenkins.
+
+For a **Multibranch Pipeline**, navigate to:
+
+```
+Pipeline → Configure → Scan Multibranch Pipeline Triggers
+```
+
+Then enable:
+
+- **Scan by webhook**
+
+and specify a **Trigger Token**.
+
+
+![Webhook trigger](images/webhook_trigger.png)
+
+
+After saving the pipeline configuration, navigate to your Git hosting platform (such as GitHub or GitLab) and create a new webhook under the repository settings.
+
+The webhook payload URL consists of the Jenkins server address together with the webhook endpoint and the trigger token.
+
+For example:
+
+```text
+http://<jenkins-server-ip>:8080/multibranch-webhook-trigger/invoke?token=<trigger-token>
+```
+
+![Webhook github](images/webhook.png)
+
+
+Whenever a push is made to the repository, the Git provider sends an HTTP request to this endpoint. Jenkins then scans the repository for changes, detects updated branches, and automatically executes the pipeline without requiring manual intervention.
+
+This provides a fully automated Continuous Deployment workflow, ensuring that every code change is built, packaged, and deployed consistently.
 
 </details>
 
