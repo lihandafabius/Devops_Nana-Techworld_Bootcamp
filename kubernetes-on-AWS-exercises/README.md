@@ -778,3 +778,62 @@ This provides a fully automated Continuous Deployment workflow, ensuring that ev
 </details>
 
 ---
+
+<details>
+<summary>Exercise 5: Use Amazon ECR as the Container Registry</summary>
+
+<br />
+
+Initially, the CI/CD pipeline pushed application images to Docker Hub. To better integrate with the AWS ecosystem, the pipeline was updated to use **Amazon Elastic Container Registry (Amazon ECR)** as the container registry.
+
+An ECR repository was first created to store the application images.
+
+### Authenticate Jenkins with Amazon ECR
+
+Authentication was performed by generating a temporary login password using the AWS CLI.
+
+```bash
+aws ecr get-login-password --region eu-north-1
+```
+
+The generated credentials were then stored securely in the Jenkins Credentials Store as `ecr-credentials`, allowing the pipeline to authenticate with Amazon ECR without exposing sensitive information.
+
+### Update the Jenkins Pipeline
+
+Only the image build and push stages of the pipeline required modification.
+
+Instead of pushing images to Docker Hub, the pipeline now builds and pushes images directly to the Amazon ECR repository.
+
+```groovy
+environment {
+    ECR_REGISTRY = "java-maven-app"
+    REGISTRY_SERVER = "480007295919.dkr.ecr.eu-north-1.amazonaws.com"
+}
+```
+
+```groovy
+docker build -t ${REGISTRY_SERVER}/${ECR_REGISTRY}:${IMAGE_NAME} .
+
+echo "$PASS" | docker login -u "$USER" --password-stdin ${REGISTRY_SERVER}
+
+docker push ${REGISTRY_SERVER}/${ECR_REGISTRY}:${IMAGE_NAME}
+```
+
+The remainder of the pipeline remained unchanged, including automatic versioning, application deployment, and committing version updates back to GitHub.
+
+### Why Amazon ECR?
+
+Migrating to Amazon ECR provides several advantages over using a public container registry:
+
+- Native integration with Amazon EKS and other AWS services.
+- Secure image storage using AWS Identity and Access Management (IAM).
+- Private repositories for improved security.
+- Built-in image vulnerability scanning.
+- Lifecycle policies for automatically cleaning up old container images.
+- Centralized container management within the AWS ecosystem.
+
+Using ECR simplifies authentication and creates a more integrated deployment workflow for applications running on AWS.
+
+</details>
+
+---
