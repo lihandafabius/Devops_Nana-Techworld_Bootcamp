@@ -788,6 +788,8 @@ Initially, the CI/CD pipeline pushed application images to Docker Hub. To better
 
 An ECR repository was first created to store the application images.
 
+![ECR Repo](images/ecr.png)
+
 ### Authenticate Jenkins with Amazon ECR
 
 Authentication was performed by generating a temporary login password using the AWS CLI.
