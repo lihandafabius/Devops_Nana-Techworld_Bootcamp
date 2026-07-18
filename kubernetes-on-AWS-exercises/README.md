@@ -1143,3 +1143,150 @@ Although Cluster Autoscaler significantly improves resource utilization, there a
 </details>
 
 ---
+
+<details>
+<summary>Expose the Application with NGINX Ingress</summary>
+
+<br />
+
+After deploying the NGINX Ingress Controller, an **Ingress** resource was created to expose the Java application outside the Kubernetes cluster.
+
+Unlike exposing every application using a `LoadBalancer` Service, an Ingress provides a single entry point for HTTP/HTTPS traffic and can route requests to multiple backend services.
+
+### Create the Ingress
+
+The Ingress routes requests from the AWS Load Balancer to the Java application running inside the `java-app` namespace.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+
+metadata:
+  name: mysql-java-app-ingress
+  namespace: java-app
+
+spec:
+  ingressClassName: nginx
+
+  rules:
+    - host: <AWS-LOAD-BALANCER-DNS>
+
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+
+            backend:
+              service:
+                name: java-mysql-app-service
+                port:
+                  number: 8080
+```
+
+After applying the manifest:
+
+```bash
+kubectl apply -f ingress.yaml
+```
+
+the Ingress Controller automatically configures the AWS Load Balancer to forward incoming traffic to the Java application.
+
+### Update the Frontend
+
+The frontend was updated so that API requests are sent to the DNS name of the AWS Load Balancer rather than to `localhost`.
+
+```javascript
+const HOST = "<AWS-LOAD-BALANCER-DNS>";
+```
+
+This allows external users to access the application through the Ingress Controller.
+
+### Verify the Ingress
+
+The deployment can be verified using:
+
+```bash
+kubectl get ingress -n java-app
+```
+
+Example output:
+
+```text
+NAME                       CLASS   HOSTS                        ADDRESS
+mysql-java-app-ingress     nginx   <AWS-LOAD-BALANCER-DNS>      <AWS-LOAD-BALANCER-DNS>
+```
+
+Once the AWS Load Balancer finishes provisioning, navigating to the assigned DNS name displays the application.
+
+![Java Application](images/application-ingress.png)
+
+### Access phpMyAdmin
+
+Since phpMyAdmin is intended only for database administration, it was not exposed through the Ingress Controller.
+
+Instead, Kubernetes port forwarding was used to create a temporary secure connection from the local machine to the service.
+
+```bash
+kubectl port-forward service/phpmyadmin-service 8081:80
+```
+
+The application can then be accessed locally at:
+
+```text
+http://localhost:8081
+```
+
+This approach keeps phpMyAdmin private while still allowing administrators to manage the database when required.
+
+![phpMyAdmin](images/phpmyadmin-portforward.png)
+
+### Access MySQL from the Terminal
+
+The MySQL database can also be administered directly from the Kubernetes cluster by connecting to the primary MySQL pod.
+
+```bash
+kubectl exec -it mysql-primary-0 -- bash
+```
+
+Once inside the container, start the MySQL client.
+
+```bash
+mysql -u myuser -p
+```
+
+or
+
+```bash
+mysql -u root -p
+```
+
+After authentication, standard SQL commands can be executed.
+
+```sql
+SHOW DATABASES;
+
+USE my_database;
+
+SHOW TABLES;
+
+SELECT * FROM team_members;
+```
+
+This provides a secure command-line interface for database administration without exposing the MySQL service outside the cluster.
+
+### Benefits of Using Ingress
+
+Using an Ingress Controller provides several advantages over exposing every application individually:
+
+- Provides a single entry point for external traffic.
+- Supports host-based and path-based routing.
+- Allows multiple applications to share the same AWS Load Balancer.
+- Simplifies TLS/SSL certificate management.
+- Reduces infrastructure costs by minimizing the number of cloud load balancers.
+- Keeps internal services such as MySQL and phpMyAdmin private while exposing only the application intended for end users.
+
+> **Note:** Administrative tools such as phpMyAdmin and MySQL should generally remain private. In production environments, they are typically accessed through VPNs, bastion hosts, or other secure administrative channels rather than being exposed publicly.
+
+</details>
+
+---
