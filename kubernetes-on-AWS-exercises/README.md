@@ -862,6 +862,7 @@ Configuring Cluster Autoscaler provides several operational benefits:
 
 - Reduces infrastructure costs by removing underutilized worker nodes.
 - Automatically provisions additional capacity when workloads cannot be scheduled.
+- May indicate security or performance issues thus Protection
 - Improves application availability during traffic spikes.
 - Prevents uncontrolled infrastructure growth by defining a maximum node capacity.
 - Maintains a minimum number of worker nodes to reduce startup delays and improve fault tolerance.
