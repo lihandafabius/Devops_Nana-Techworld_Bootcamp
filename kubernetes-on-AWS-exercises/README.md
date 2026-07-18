@@ -1127,6 +1127,8 @@ spec:
 >
 > Available Cluster Autoscaler releases and their corresponding versions can be found in the official [Kubernetes Autoscaler Tags](https://github.com/kubernetes/autoscaler/tags) repository.
 
+![Cluster Autoscaler Deployment ](images/cluster_autoscaler.png)
+
 ### Considerations
 
 Although Cluster Autoscaler significantly improves resource utilization, there are some trade-offs:
