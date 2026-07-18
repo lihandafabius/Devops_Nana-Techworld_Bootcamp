@@ -846,11 +846,11 @@ Using ECR simplifies authentication and creates a more integrated deployment wor
 
 <br />
 
-Although the application was successfully running on Amazon EKS, the worker nodes remained underutilized during periods of low demand. Since Amazon EC2 instances incur charges regardless of resource utilization, Kubernetes Cluster Autoscaler was configured to automatically adjust the size of the worker node group based on workload requirements.
+Although the application was successfully running on Amazon EKS, the worker nodes can remain underutilized during periods of low demand. Since Amazon EC2 instances incur charges regardless of resource utilization, Kubernetes Cluster Autoscaler was configured to automatically adjust the size of the worker node group based on workload requirements.
 
 The node group was configured with:
 
-- **Minimum nodes:** 1
+- **Minimum nodes:** 2
 - **Desired nodes:** 3
 - **Maximum nodes:** 5
 
@@ -874,7 +874,6 @@ Instead of storing AWS credentials inside the pod, Amazon EKS uses **IAM Roles f
 
 IRSA establishes trust between Kubernetes and AWS using the cluster's **OpenID Connect (OIDC)** provider. When the Cluster Autoscaler starts, AWS verifies the Kubernetes service account token, issues temporary AWS Security Token Service (STS) credentials, and allows the autoscaler to call the required AWS APIs.
 
-The authentication flow is illustrated below.
 
 ![IRSA Authentication Flow](images/irsa-flow.png)
 
@@ -913,23 +912,219 @@ annotations:
   eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/cluster-autoscaler
 ```
 
+![EKS Role](images/eks-role.png)
+
+
 This allows the Cluster Autoscaler to obtain temporary AWS credentials through AWS STS without storing long-lived access keys inside the cluster.
 
 ### Deploy Cluster Autoscaler
 
 After the IAM role was configured, the Cluster Autoscaler was deployed into the `kube-system` namespace.
 
-One important requirement is that the **Cluster Autoscaler version should closely match the Kubernetes cluster version** to ensure compatibility.
-
-For example:
-
 ```yaml
-image: registry.k8s.io/autoscaling/cluster-autoscaler:v1.35.1
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    k8s-addon: cluster-autoscaler.addons.k8s.io
+    k8s-app: cluster-autoscaler
+  name: cluster-autoscaler
+  namespace: kube-system
+  annotations:
+    eks.amazonaws.com/role-arn: <YOUR CLUSTER AUTOSCALER IAM ROLE ARN>
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-autoscaler
+  labels:
+    k8s-addon: cluster-autoscaler.addons.k8s.io
+    k8s-app: cluster-autoscaler
+rules:
+  - apiGroups: [""]
+    resources: ["events", "endpoints"]
+    verbs: ["create", "patch"]
+  - apiGroups: [""]
+    resources: ["pods/eviction"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods/status"]
+    verbs: ["update"]
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    resourceNames: ["cluster-autoscaler"]
+    verbs: ["get", "update"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["watch", "list", "get", "update"]
+  - apiGroups: [""]
+    resources:
+      - "namespaces"
+      - "pods"
+      - "services"
+      - "replicationcontrollers"
+      - "persistentvolumeclaims"
+      - "persistentvolumes"
+    verbs: ["watch", "list", "get"]
+  - apiGroups: ["extensions"]
+    resources: ["replicasets", "daemonsets"]
+    verbs: ["watch", "list", "get"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["watch", "list"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets", "replicasets", "daemonsets"]
+    verbs: ["watch", "list", "get"]
+  - apiGroups: ["resource.k8s.io"]
+    resources: ["deviceclasses", "resourceslices", "resourceclaims"]
+    verbs: ["watch", "list", "get"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses", "csinodes", "csidrivers", "csistoragecapacities", "volumeattachments"]
+    verbs: ["watch", "list", "get"]
+  - apiGroups: ["batch", "extensions"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["create"]
+  - apiGroups: ["coordination.k8s.io"]
+    resourceNames: ["cluster-autoscaler"]
+    resources: ["leases"]
+    verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cluster-autoscaler
+  namespace: kube-system
+  labels:
+    k8s-addon: cluster-autoscaler.addons.k8s.io
+    k8s-app: cluster-autoscaler
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["cluster-autoscaler-status", "cluster-autoscaler-priority-expander"]
+    verbs: ["delete", "get", "update", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-autoscaler
+  labels:
+    k8s-addon: cluster-autoscaler.addons.k8s.io
+    k8s-app: cluster-autoscaler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-autoscaler
+subjects:
+  - kind: ServiceAccount
+    name: cluster-autoscaler
+    namespace: kube-system
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cluster-autoscaler
+  namespace: kube-system
+  labels:
+    k8s-addon: cluster-autoscaler.addons.k8s.io
+    k8s-app: cluster-autoscaler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cluster-autoscaler
+subjects:
+  - kind: ServiceAccount
+    name: cluster-autoscaler
+    namespace: kube-system
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-autoscaler
+  namespace: kube-system
+  labels:
+    app: cluster-autoscaler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cluster-autoscaler
+  template:
+    metadata:
+      labels:
+        app: cluster-autoscaler
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '8085'
+        cluster-autoscaler.kubernetes.io/safe-to-evict: 'false'
+    spec:
+      priorityClassName: system-cluster-critical
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: cluster-autoscaler
+      containers:
+        - image: registry.k8s.io/autoscaling/cluster-autoscaler:v1.<K8S_VERSION>
+          name: cluster-autoscaler
+          env:
+            - name: AWS_REGION
+              value: <YOUR AWS REGION>
+          resources:
+            limits:
+              cpu: 100m
+              memory: 600Mi
+            requests:
+              cpu: 100m
+              memory: 600Mi
+          command:
+            - ./cluster-autoscaler
+            - --v=4
+            - --stderrthreshold=info
+            - --cloud-provider=aws
+            - --skip-nodes-with-local-storage=false
+            - --expander=least-waste
+            - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/<YOUR CLUSTER NAME>
+            - --balance-similar-node-groups
+            - --skip-nodes-with-system-pods=false
+          volumeMounts:
+            - name: ssl-certs
+              mountPath: /etc/ssl/certs/ca-certificates.crt # /etc/ssl/certs/ca-bundle.crt for Amazon Linux Worker Nodes
+              readOnly: true
+          imagePullPolicy: "Always"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: ssl-certs
+          hostPath:
+            path: "/etc/ssl/certs/ca-bundle.crt"
+
+
 ```
 
-The available releases can be found in the Kubernetes Autoscaler repository:
-
-https://github.com/kubernetes/autoscaler/tags
+> **Note:** The **Cluster Autoscaler version should closely match the Kubernetes version** running on the Amazon EKS cluster to ensure compatibility and access to the latest supported features. For example:
+>
+> ```yaml
+> image: registry.k8s.io/autoscaling/cluster-autoscaler:v1.36.0
+> ```
+>
+> Available Cluster Autoscaler releases and their corresponding versions can be found in the official [Kubernetes Autoscaler Tags](https://github.com/kubernetes/autoscaler/tags) repository.
 
 ### Considerations
 
