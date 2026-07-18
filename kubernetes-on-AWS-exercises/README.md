@@ -1133,7 +1133,7 @@ Although Cluster Autoscaler significantly improves resource utilization, there a
 - Scaling up is not instantaneous, since launching new EC2 instances typically takes a few minutes.
 - Applications with sudden traffic spikes should maintain a reasonable minimum node count to avoid scheduling delays.
 - Proper resource requests and limits should be configured on workloads to enable accurate scaling decisions.
-- Cluster Autoscaler scales **nodes**, not pods. Pod-level scaling is handled separately using the Horizontal Pod Autoscaler (HPA).
+- Cluster Autoscaler scales **nodes**, not pods. Pod-level scaling can be handled separately using the Horizontal Pod Autoscaler (HPA).
 
 </details>
 
