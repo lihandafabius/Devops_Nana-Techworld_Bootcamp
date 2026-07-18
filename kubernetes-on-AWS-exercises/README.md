@@ -840,3 +840,106 @@ Using ECR simplifies authentication and creates a more integrated deployment wor
 </details>
 
 ---
+
+<details>
+<summary>Exercise 6: Configure Kubernetes Cluster Autoscaler</summary>
+
+<br />
+
+Although the application was successfully running on Amazon EKS, the worker nodes remained underutilized during periods of low demand. Since Amazon EC2 instances incur charges regardless of resource utilization, Kubernetes Cluster Autoscaler was configured to automatically adjust the size of the worker node group based on workload requirements.
+
+The node group was configured with:
+
+- **Minimum nodes:** 1
+- **Desired nodes:** 3
+- **Maximum nodes:** 5
+
+This allows the cluster to reduce infrastructure costs during periods of low utilization while automatically provisioning additional worker nodes when application demand increases.
+
+### Benefits of Cluster Autoscaler
+
+Configuring Cluster Autoscaler provides several operational benefits:
+
+- Reduces infrastructure costs by removing underutilized worker nodes.
+- Automatically provisions additional capacity when workloads cannot be scheduled.
+- Improves application availability during traffic spikes.
+- Prevents uncontrolled infrastructure growth by defining a maximum node capacity.
+- Maintains a minimum number of worker nodes to reduce startup delays and improve fault tolerance.
+
+### IAM Roles for Service Accounts (IRSA)
+
+The Cluster Autoscaler requires permission to communicate with AWS services in order to create and terminate EC2 instances.
+
+Instead of storing AWS credentials inside the pod, Amazon EKS uses **IAM Roles for Service Accounts (IRSA)**.
+
+IRSA establishes trust between Kubernetes and AWS using the cluster's **OpenID Connect (OIDC)** provider. When the Cluster Autoscaler starts, AWS verifies the Kubernetes service account token, issues temporary AWS Security Token Service (STS) credentials, and allows the autoscaler to call the required AWS APIs.
+
+The authentication flow is illustrated below.
+
+![IRSA Authentication Flow](images/irsa-flow.png)
+
+### Cluster Autoscaler IAM Policy
+
+A custom IAM policy was created to allow the autoscaler to manage the EC2 Auto Scaling Group.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "autoscaling:DescribeAutoScalingGroups",
+        "autoscaling:DescribeAutoScalingInstances",
+        "autoscaling:DescribeLaunchConfigurations",
+        "autoscaling:DescribeScalingActivities",
+        "autoscaling:SetDesiredCapacity",
+        "autoscaling:TerminateInstanceInAutoScalingGroup",
+        "ec2:DescribeInstanceTypes",
+        "ec2:DescribeLaunchTemplateVersions"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+Since the cluster was created using **eksctl** with OIDC enabled, the IAM OIDC provider was automatically configured. An IAM Role was then created using **Web Identity** and associated with the Cluster Autoscaler ServiceAccount.
+
+The ServiceAccount references the IAM Role using the following annotation:
+
+```yaml
+annotations:
+  eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/cluster-autoscaler
+```
+
+This allows the Cluster Autoscaler to obtain temporary AWS credentials through AWS STS without storing long-lived access keys inside the cluster.
+
+### Deploy Cluster Autoscaler
+
+After the IAM role was configured, the Cluster Autoscaler was deployed into the `kube-system` namespace.
+
+One important requirement is that the **Cluster Autoscaler version should closely match the Kubernetes cluster version** to ensure compatibility.
+
+For example:
+
+```yaml
+image: registry.k8s.io/autoscaling/cluster-autoscaler:v1.35.1
+```
+
+The available releases can be found in the Kubernetes Autoscaler repository:
+
+https://github.com/kubernetes/autoscaler/tags
+
+### Considerations
+
+Although Cluster Autoscaler significantly improves resource utilization, there are some trade-offs:
+
+- Scaling up is not instantaneous, since launching new EC2 instances typically takes a few minutes.
+- Applications with sudden traffic spikes should maintain a reasonable minimum node count to avoid scheduling delays.
+- Proper resource requests and limits should be configured on workloads to enable accurate scaling decisions.
+- Cluster Autoscaler scales **nodes**, not pods. Pod-level scaling is handled separately using the Horizontal Pod Autoscaler (HPA).
+
+</details>
+
+---
