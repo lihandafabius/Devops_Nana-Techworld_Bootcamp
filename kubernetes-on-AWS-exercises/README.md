@@ -788,6 +788,8 @@ Initially, the CI/CD pipeline pushed application images to Docker Hub. To better
 
 An ECR repository was first created to store the application images.
 
+![ECR Repo](images/ecr.png)
+
 ### Authenticate Jenkins with Amazon ECR
 
 Authentication was performed by generating a temporary login password using the AWS CLI.
@@ -836,6 +838,307 @@ Migrating to Amazon ECR provides several advantages over using a public containe
 - Centralized container management within the AWS ecosystem.
 
 Using ECR simplifies authentication and creates a more integrated deployment workflow for applications running on AWS.
+
+</details>
+
+---
+
+<details>
+<summary>Exercise 6: Configure Kubernetes Cluster Autoscaler</summary>
+
+<br />
+
+Although the application was successfully running on Amazon EKS, the worker nodes can remain underutilized during periods of low demand. Since Amazon EC2 instances incur charges regardless of resource utilization, Kubernetes Cluster Autoscaler was configured to automatically adjust the size of the worker node group based on workload requirements.
+
+The node group was configured with:
+
+- **Minimum nodes:** 2
+- **Desired nodes:** 3
+- **Maximum nodes:** 5
+
+This allows the cluster to reduce infrastructure costs during periods of low utilization while automatically provisioning additional worker nodes when application demand increases.
+
+### Benefits of Cluster Autoscaler
+
+Configuring Cluster Autoscaler provides several operational benefits:
+
+- Reduces infrastructure costs by removing underutilized worker nodes.
+- Automatically provisions additional capacity when workloads cannot be scheduled.
+- May indicate security or performance issues thus Protection
+- Improves application availability during traffic spikes.
+- Prevents uncontrolled infrastructure growth by defining a maximum node capacity.
+- Maintains a minimum number of worker nodes to reduce startup delays and improve fault tolerance.
+
+### IAM Roles for Service Accounts (IRSA)
+
+The Cluster Autoscaler requires permission to communicate with AWS services in order to create and terminate EC2 instances.
+
+Instead of storing AWS credentials inside the pod, Amazon EKS uses **IAM Roles for Service Accounts (IRSA)**.
+
+IRSA establishes trust between Kubernetes and AWS using the cluster's **OpenID Connect (OIDC)** provider. When the Cluster Autoscaler starts, AWS verifies the Kubernetes service account token, issues temporary AWS Security Token Service (STS) credentials, and allows the autoscaler to call the required AWS APIs.
+
+
+![IRSA Authentication Flow](images/irsa-flow.png)
+
+### Cluster Autoscaler IAM Policy
+
+A custom IAM policy was created to allow the autoscaler to manage the EC2 Auto Scaling Group.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "autoscaling:DescribeAutoScalingGroups",
+        "autoscaling:DescribeAutoScalingInstances",
+        "autoscaling:DescribeLaunchConfigurations",
+        "autoscaling:DescribeScalingActivities",
+        "autoscaling:SetDesiredCapacity",
+        "autoscaling:TerminateInstanceInAutoScalingGroup",
+        "ec2:DescribeInstanceTypes",
+        "ec2:DescribeLaunchTemplateVersions"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+Since the cluster was created using **eksctl** with OIDC enabled, the IAM OIDC provider was automatically configured. An IAM Role was then created using **Web Identity** and associated with the Cluster Autoscaler ServiceAccount.
+
+The ServiceAccount references the IAM Role using the following annotation:
+
+```yaml
+annotations:
+  eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/cluster-autoscaler
+```
+
+![EKS Role](images/eks-role.png)
+
+
+This allows the Cluster Autoscaler to obtain temporary AWS credentials through AWS STS without storing long-lived access keys inside the cluster.
+
+### Deploy Cluster Autoscaler
+
+After the IAM role was configured, the Cluster Autoscaler was deployed into the `kube-system` namespace.
+
+```yaml
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    k8s-addon: cluster-autoscaler.addons.k8s.io
+    k8s-app: cluster-autoscaler
+  name: cluster-autoscaler
+  namespace: kube-system
+  annotations:
+    eks.amazonaws.com/role-arn: <YOUR CLUSTER AUTOSCALER IAM ROLE ARN>
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cluster-autoscaler
+  labels:
+    k8s-addon: cluster-autoscaler.addons.k8s.io
+    k8s-app: cluster-autoscaler
+rules:
+  - apiGroups: [""]
+    resources: ["events", "endpoints"]
+    verbs: ["create", "patch"]
+  - apiGroups: [""]
+    resources: ["pods/eviction"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods/status"]
+    verbs: ["update"]
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    resourceNames: ["cluster-autoscaler"]
+    verbs: ["get", "update"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["watch", "list", "get", "update"]
+  - apiGroups: [""]
+    resources:
+      - "namespaces"
+      - "pods"
+      - "services"
+      - "replicationcontrollers"
+      - "persistentvolumeclaims"
+      - "persistentvolumes"
+    verbs: ["watch", "list", "get"]
+  - apiGroups: ["extensions"]
+    resources: ["replicasets", "daemonsets"]
+    verbs: ["watch", "list", "get"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["watch", "list"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets", "replicasets", "daemonsets"]
+    verbs: ["watch", "list", "get"]
+  - apiGroups: ["resource.k8s.io"]
+    resources: ["deviceclasses", "resourceslices", "resourceclaims"]
+    verbs: ["watch", "list", "get"]
+  - apiGroups: ["storage.k8s.io"]
+    resources: ["storageclasses", "csinodes", "csidrivers", "csistoragecapacities", "volumeattachments"]
+    verbs: ["watch", "list", "get"]
+  - apiGroups: ["batch", "extensions"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch", "patch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["create"]
+  - apiGroups: ["coordination.k8s.io"]
+    resourceNames: ["cluster-autoscaler"]
+    resources: ["leases"]
+    verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cluster-autoscaler
+  namespace: kube-system
+  labels:
+    k8s-addon: cluster-autoscaler.addons.k8s.io
+    k8s-app: cluster-autoscaler
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["cluster-autoscaler-status", "cluster-autoscaler-priority-expander"]
+    verbs: ["delete", "get", "update", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-autoscaler
+  labels:
+    k8s-addon: cluster-autoscaler.addons.k8s.io
+    k8s-app: cluster-autoscaler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-autoscaler
+subjects:
+  - kind: ServiceAccount
+    name: cluster-autoscaler
+    namespace: kube-system
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cluster-autoscaler
+  namespace: kube-system
+  labels:
+    k8s-addon: cluster-autoscaler.addons.k8s.io
+    k8s-app: cluster-autoscaler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cluster-autoscaler
+subjects:
+  - kind: ServiceAccount
+    name: cluster-autoscaler
+    namespace: kube-system
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-autoscaler
+  namespace: kube-system
+  labels:
+    app: cluster-autoscaler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cluster-autoscaler
+  template:
+    metadata:
+      labels:
+        app: cluster-autoscaler
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '8085'
+        cluster-autoscaler.kubernetes.io/safe-to-evict: 'false'
+    spec:
+      priorityClassName: system-cluster-critical
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      serviceAccountName: cluster-autoscaler
+      containers:
+        - image: registry.k8s.io/autoscaling/cluster-autoscaler:v1.<K8S_VERSION>
+          name: cluster-autoscaler
+          env:
+            - name: AWS_REGION
+              value: <YOUR AWS REGION>
+          resources:
+            limits:
+              cpu: 100m
+              memory: 600Mi
+            requests:
+              cpu: 100m
+              memory: 600Mi
+          command:
+            - ./cluster-autoscaler
+            - --v=4
+            - --stderrthreshold=info
+            - --cloud-provider=aws
+            - --skip-nodes-with-local-storage=false
+            - --expander=least-waste
+            - --node-group-auto-discovery=asg:tag=k8s.io/cluster-autoscaler/enabled,k8s.io/cluster-autoscaler/<YOUR CLUSTER NAME>
+            - --balance-similar-node-groups
+            - --skip-nodes-with-system-pods=false
+          volumeMounts:
+            - name: ssl-certs
+              mountPath: /etc/ssl/certs/ca-certificates.crt # /etc/ssl/certs/ca-bundle.crt for Amazon Linux Worker Nodes
+              readOnly: true
+          imagePullPolicy: "Always"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+      volumes:
+        - name: ssl-certs
+          hostPath:
+            path: "/etc/ssl/certs/ca-bundle.crt"
+
+
+```
+
+> **Note:** The **Cluster Autoscaler version should closely match the Kubernetes version** running on the Amazon EKS cluster to ensure compatibility and access to the latest supported features. For example:
+>
+> ```yaml
+> image: registry.k8s.io/autoscaling/cluster-autoscaler:v1.36.0
+> ```
+>
+> Available Cluster Autoscaler releases and their corresponding versions can be found in the official [Kubernetes Autoscaler Tags](https://github.com/kubernetes/autoscaler/tags) repository.
+
+![Cluster Autoscaler Deployment ](images/cluster_autoscaler.png)
+
+### Considerations
+
+Although Cluster Autoscaler significantly improves resource utilization, there are some trade-offs:
+
+- Scaling up is not instantaneous, since launching new EC2 instances typically takes a few minutes.
+- Applications with sudden traffic spikes should maintain a reasonable minimum node count to avoid scheduling delays.
+- Proper resource requests and limits should be configured on workloads to enable accurate scaling decisions.
+- Cluster Autoscaler scales **nodes**, not pods. Pod-level scaling can be handled separately using the Horizontal Pod Autoscaler (HPA).
 
 </details>
 
