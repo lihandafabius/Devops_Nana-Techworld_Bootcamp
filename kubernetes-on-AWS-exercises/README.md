@@ -1261,9 +1261,21 @@ Throughout this project, several challenges were encountered while working with 
 
 ### 1. AWS EBS CSI Driver Installation Failed
 
-The AWS EBS CSI Driver initially failed to install because the cluster had been created using multiple `eksctl` commands, requiring several IAM resources to be configured manually.
+The **AWS EBS CSI (Container Storage Interface) Driver** enables Kubernetes to provision and manage **Amazon EBS volumes** dynamically. It is essential for stateful applications such as MySQL, allowing data to persist even if pods are rescheduled or recreated on different worker nodes.
+
+During the initial cluster setup, the EBS CSI Driver failed to install because the cluster had been created using multiple `eksctl` commands, requiring several IAM resources to be configured manually.
+
+![EBS CSI creation failure](images/error.png)
+
+As a result, the add-on remained in a failed state and persistent storage could not be provisioned correctly.
 
 The issue was resolved by recreating the cluster using a declarative **eksctl ClusterConfig** file with OIDC enabled and the EBS CSI Driver configured as an add-on.
+
+![Failure Resolution](images/resolve.png)
+
+Once the cluster was recreated, the EBS CSI Driver installed successfully and persistent volumes could be provisioned automatically for MySQL.
+
+![Error Fix](images/fix.png)
 
 > **Lesson Learned:** Defining the entire EKS infrastructure in a single configuration file makes deployments more reliable, reproducible, and easier to maintain.
 
@@ -1277,21 +1289,19 @@ The root cause was that the project's `.gitignore` excluded the `build/` directo
 
 The solution was to build the application before creating the Docker image and configure Gradle to always generate a predictable JAR filename (`java-app.jar`).
 
-> **Lesson Learned:** CI/CD pipelines should always produce predictable build artifacts to simplify Docker image creation.
 
 ---
-
 ### 3. Understanding Amazon EKS Autoscaling Costs
 
 Initially, it appeared that configuring a node group with a maximum size of five nodes would incur charges for all five instances.
 
-After reviewing the AWS documentation, it became clear that **AWS charges only for EC2 instances that are actually running**. The maximum node count simply defines the upper scaling limit.
+After reviewing the AWS documentation, it became clear that **AWS charges only for EC2 instances that are actually running**. The maximum node count simply defines the upper scaling limit and does not reserve or bill unused capacity.
 
-For more information, see the official AWS documentation:
+For more information, refer to the AWS documentation:
 
-https://aws.amazon.com/autoscaling/pricing/
+- **[AWS Auto Scaling Pricing](https://aws.amazon.com/autoscaling/pricing/)** — explains that there is no additional charge for AWS Auto Scaling itself; you pay only for the AWS resources that are provisioned.
+- **[Amazon EC2 Auto Scaling User Guide](https://docs.aws.amazon.com/autoscaling/ec2/userguide/what-is-amazon-ec2-auto-scaling.html)** — explains how Auto Scaling groups launch and terminate EC2 instances based on demand.
 
-> **Lesson Learned:** Properly configuring minimum and maximum node counts helps reduce infrastructure costs while maintaining application availability.
 
 ---
 
@@ -1301,6 +1311,6 @@ During the CI/CD implementation, different parts of the deployment used differen
 
 The solution was to standardize the Java version across the Gradle toolchain, Jenkins environment, Docker image, and application build configuration.
 
-> **Lesson Learned:** Development, build, testing, and production environments should use compatible dependency versions. Clear deployment documentation from developers—including language versions, build tools, runtime dependencies, and base images—helps DevOps engineers build reliable and reproducible deployment pipelines.
+> **Best Practice:** Development, build, testing, and production environments should use compatible dependency versions. Clear deployment documentation from developers—including language versions, build tools, runtime dependencies, and base images—helps DevOps engineers build reliable and reproducible deployment pipelines.
 
 </details>
