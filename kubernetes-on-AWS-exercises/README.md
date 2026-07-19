@@ -1145,17 +1145,31 @@ Although Cluster Autoscaler significantly improves resource utilization, there a
 ---
 
 <details>
-<summary>Expose the Application with NGINX Ingress</summary>
+<summary>Deploy and Configure NGINX Ingress</summary>
 
 <br />
 
-After deploying the NGINX Ingress Controller, an **Ingress** resource was created to expose the Java application outside the Kubernetes cluster.
+By default, the Java application and phpMyAdmin were exposed using **ClusterIP** services, making them accessible only from within the Kubernetes cluster.
 
-Unlike exposing every application using a `LoadBalancer` Service, an Ingress provides a single entry point for HTTP/HTTPS traffic and can route requests to multiple backend services.
+To expose the Java application to external users, an **NGINX Ingress Controller** was deployed using the official OCI Helm chart.
 
-### Create the Ingress
+### Install the NGINX Ingress Controller
 
-The Ingress routes requests from the AWS Load Balancer to the Java application running inside the `java-app` namespace.
+```bash
+helm install nginx-ingress oci://ghcr.io/nginx/charts/nginx-ingress \
+--set controller.reportIngressStatus.enabled=true
+```
+
+![Ingress Controller](images/ingress_controler.png)
+
+
+Using the OCI registry allows Helm charts to be distributed as OCI artifacts, providing a standardized and secure method for managing Kubernetes packages.
+
+> **Note:** The `controller.reportIngressStatus.enabled=true` option allows the NGINX Ingress Controller to automatically update Ingress resources with the external hostname of the provisioned AWS Load Balancer, making it easy to identify the application's public endpoint.
+
+### Ingress Rule
+
+An Ingress rule was created to route external traffic from the AWS Load Balancer to the Java application running in the `java-app` namespace.
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -1183,48 +1197,27 @@ spec:
                   number: 8080
 ```
 
-After applying the manifest:
+![Ingress rule](images/ingress.png)
 
-```bash
-kubectl apply -f ingress.yaml
-```
+### Update the Frontend code
 
-the Ingress Controller automatically configures the AWS Load Balancer to forward incoming traffic to the Java application.
-
-### Update the Frontend
-
-The frontend was updated so that API requests are sent to the DNS name of the AWS Load Balancer rather than to `localhost`.
+The frontend application was updated to communicate with the AWS Load Balancer rather than `localhost`.
 
 ```javascript
 const HOST = "<AWS-LOAD-BALANCER-DNS>";
 ```
+All API requests are now routed through the Ingress Controller.
 
-This allows external users to access the application through the Ingress Controller.
 
-### Verify the Ingress
+Once the AWS Load Balancer finishes provisioning, browsing to the assigned DNS name displays the application.
 
-The deployment can be verified using:
-
-```bash
-kubectl get ingress -n java-app
-```
-
-Example output:
-
-```text
-NAME                       CLASS   HOSTS                        ADDRESS
-mysql-java-app-ingress     nginx   <AWS-LOAD-BALANCER-DNS>      <AWS-LOAD-BALANCER-DNS>
-```
-
-Once the AWS Load Balancer finishes provisioning, navigating to the assigned DNS name displays the application.
-
-![Java Application](images/application-ingress.png)
+![Java Application](images/app.png)
 
 ### Access phpMyAdmin
 
-Since phpMyAdmin is intended only for database administration, it was not exposed through the Ingress Controller.
+Since phpMyAdmin is intended only for database administration, it was not exposed publicly.
 
-Instead, Kubernetes port forwarding was used to create a temporary secure connection from the local machine to the service.
+Instead, Kubernetes port forwarding was used to create a temporary secure connection to the service.
 
 ```bash
 kubectl port-forward service/phpmyadmin-service 8081:80
@@ -1236,56 +1229,21 @@ The application can then be accessed locally at:
 http://localhost:8081
 ```
 
-This approach keeps phpMyAdmin private while still allowing administrators to manage the database when required.
+![phpMyAdmin](images/port_forward.png)
 
-![phpMyAdmin](images/phpmyadmin-portforward.png)
+![Mysql](images/all.png)
 
-### Access MySQL from the Terminal
 
-The MySQL database can also be administered directly from the Kubernetes cluster by connecting to the primary MySQL pod.
+### Benefits of Using an Ingress Controller
 
-```bash
-kubectl exec -it mysql-primary-0 -- bash
-```
+Compared to exposing every application using individual `LoadBalancer` Services, an Ingress Controller offers several advantages:
 
-Once inside the container, start the MySQL client.
-
-```bash
-mysql -u myuser -p
-```
-
-or
-
-```bash
-mysql -u root -p
-```
-
-After authentication, standard SQL commands can be executed.
-
-```sql
-SHOW DATABASES;
-
-USE my_database;
-
-SHOW TABLES;
-
-SELECT * FROM team_members;
-```
-
-This provides a secure command-line interface for database administration without exposing the MySQL service outside the cluster.
-
-### Benefits of Using Ingress
-
-Using an Ingress Controller provides several advantages over exposing every application individually:
-
-- Provides a single entry point for external traffic.
+- Provides a single entry point for external HTTP/HTTPS traffic.
+- Allows multiple applications to share a single AWS Load Balancer.
 - Supports host-based and path-based routing.
-- Allows multiple applications to share the same AWS Load Balancer.
-- Simplifies TLS/SSL certificate management.
+- Simplifies SSL/TLS certificate management.
 - Reduces infrastructure costs by minimizing the number of cloud load balancers.
-- Keeps internal services such as MySQL and phpMyAdmin private while exposing only the application intended for end users.
-
-> **Note:** Administrative tools such as phpMyAdmin and MySQL should generally remain private. In production environments, they are typically accessed through VPNs, bastion hosts, or other secure administrative channels rather than being exposed publicly.
+- Keeps internal services such as MySQL and phpMyAdmin private while exposing only end-user applications.
 
 </details>
 
