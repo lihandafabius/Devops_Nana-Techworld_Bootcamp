@@ -880,6 +880,7 @@ IRSA establishes trust between Kubernetes and AWS using the cluster's **OpenID C
 
 ![IRSA Authentication Flow](images/irsa-flow.png)
 
+
 ### Cluster Autoscaler IAM Policy
 
 A custom IAM policy was created to allow the autoscaler to manage the EC2 Auto Scaling Group.
@@ -915,7 +916,7 @@ annotations:
   eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/cluster-autoscaler
 ```
 
-![EKS Role](images/eks-role.png)
+![EKS Role](images/eks_role.png)
 
 
 This allows the Cluster Autoscaler to obtain temporary AWS credentials through AWS STS without storing long-lived access keys inside the cluster.
@@ -1248,3 +1249,68 @@ Compared to exposing every application using individual `LoadBalancer` Services,
 </details>
 
 ---
+
+<details>
+<summary>Challenges</summary>
+
+<br />
+
+Throughout this project, several challenges were encountered while working with Amazon EKS, AWS services, and the CI/CD pipeline. Resolving these issues provided valuable insight into building and operating production-ready Kubernetes environments.
+
+---
+
+### 1. AWS EBS CSI Driver Installation Failed
+
+The **AWS EBS CSI (Container Storage Interface) Driver** enables Kubernetes to provision and manage **Amazon EBS volumes** dynamically. It is essential for stateful applications such as MySQL, allowing data to persist even if pods are rescheduled or recreated on different worker nodes.
+
+During the initial cluster setup, the EBS CSI Driver failed to install because the cluster had been created using multiple `eksctl` commands, requiring several IAM resources to be configured manually.
+
+![EBS CSI creation failure](images/error.png)
+
+As a result, the add-on remained in a failed state and persistent storage could not be provisioned correctly.
+
+The issue was resolved by recreating the cluster using a declarative **eksctl ClusterConfig** file with OIDC enabled and the EBS CSI Driver configured as an add-on.
+
+![Failure Resolution](images/resolve.png)
+
+Once the cluster was recreated, the EBS CSI Driver installed successfully and persistent volumes could be provisioned automatically for MySQL.
+
+![Error Fix](images/fix.png)
+
+> **Lesson Learned:** Defining the entire EKS infrastructure in a single configuration file makes deployments more reliable, reproducible, and easier to maintain.
+
+---
+
+### 2. Docker Build Failed Due to Missing Build Artifacts
+
+The Jenkins pipeline failed during the Docker build because the compiled JAR file did not exist.
+
+The root cause was that the project's `.gitignore` excluded the `build/` directory, meaning Jenkins checked out only the source code before the Docker build.
+
+The solution was to build the application before creating the Docker image and configure Gradle to always generate a predictable JAR filename (`java-app.jar`).
+
+
+---
+### 3. Understanding Amazon EKS Autoscaling Costs
+
+Initially, it appeared that configuring a node group with a maximum size of five nodes would incur charges for all five instances.
+
+After reviewing the AWS documentation, it became clear that **AWS charges only for EC2 instances that are actually running**. The maximum node count simply defines the upper scaling limit and does not reserve or bill unused capacity.
+
+For more information, refer to the AWS documentation:
+
+- **[AWS Auto Scaling Pricing](https://aws.amazon.com/autoscaling/pricing/)** — explains that there is no additional charge for AWS Auto Scaling itself; you pay only for the AWS resources that are provisioned.
+- **[Amazon EC2 Auto Scaling User Guide](https://docs.aws.amazon.com/autoscaling/ec2/userguide/what-is-amazon-ec2-auto-scaling.html)** — explains how Auto Scaling groups launch and terminate EC2 instances based on demand.
+
+
+---
+
+### 4. Java Runtime Version Mismatch
+
+During the CI/CD implementation, different parts of the deployment used different Java versions. The application was originally developed with Java 17, while the Jenkins build environment and Docker image later required Java 21.
+
+The solution was to standardize the Java version across the Gradle toolchain, Jenkins environment, Docker image, and application build configuration.
+
+> **Best Practice:** Development, build, testing, and production environments should use compatible dependency versions. Clear deployment documentation from developers—including language versions, build tools, runtime dependencies, and base images—helps DevOps engineers build reliable and reproducible deployment pipelines.
+
+</details>
