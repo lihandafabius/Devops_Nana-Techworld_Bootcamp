@@ -1251,92 +1251,56 @@ Compared to exposing every application using individual `LoadBalancer` Services,
 ---
 
 <details>
-<summary>Challenges Encountered</summary>
+<summary>Challenges</summary>
 
 <br />
 
-Throughout the implementation of this project, several real-world challenges were encountered. Most of these were not Kubernetes issues themselves, but rather challenges related to AWS integrations, storage provisioning, and CI/CD automation. Resolving them provided a deeper understanding of how Amazon EKS and its surrounding AWS services work together.
+Throughout this project, several challenges were encountered while working with Amazon EKS, AWS services, and the CI/CD pipeline. Resolving these issues provided valuable insight into building and operating production-ready Kubernetes environments.
 
 ---
 
-### 1. AWS EBS CSI Driver Failed During Cluster Creation
+### 1. AWS EBS CSI Driver Installation Failed
 
-During the initial cluster setup, the **AWS EBS CSI Driver** repeatedly failed to install and remained in a `CREATE_FAILED` state.
+The AWS EBS CSI Driver initially failed to install because the cluster had been created using multiple `eksctl` commands, requiring several IAM resources to be configured manually.
 
-The cluster had originally been created using multiple `eksctl` CLI commands, which required manually configuring supporting resources such as IAM roles and permissions. This made the add-on installation more error-prone.
+The issue was resolved by recreating the cluster using a declarative **eksctl ClusterConfig** file with OIDC enabled and the EBS CSI Driver configured as an add-on.
 
-The issue was resolved by recreating the cluster using a declarative **eksctl ClusterConfig** file.
-
-```yaml
-iam:
-  withOIDC: true
-
-addons:
-  - name: aws-ebs-csi-driver
-    version: latest
-    attachPolicyARNs:
-      - arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
-```
-
-Using a single configuration file allowed `eksctl` to provision the required IAM roles, OIDC provider, managed node groups, Fargate profile, and add-ons automatically. The EBS CSI Driver was then created successfully without additional manual configuration.
-
-> **Lesson Learned:** Using a declarative `ClusterConfig` file produces more consistent, reproducible, and maintainable EKS deployments than issuing multiple CLI commands.
+> **Lesson Learned:** Defining the entire EKS infrastructure in a single configuration file makes deployments more reliable, reproducible, and easier to maintain.
 
 ---
 
-### 2. Docker Build Failed Because Build Artifacts Were Missing
+### 2. Docker Build Failed Due to Missing Build Artifacts
 
-While configuring the Jenkins pipeline, Docker image builds repeatedly failed with errors similar to:
+The Jenkins pipeline failed during the Docker build because the compiled JAR file did not exist.
 
-```text
-COPY build/libs/java-app.jar: not found
-```
+The root cause was that the project's `.gitignore` excluded the `build/` directory, meaning Jenkins checked out only the source code before the Docker build.
 
-Initially this appeared to be a Gradle or Docker issue. However, the actual cause was that the project's `.gitignore` excluded the `build/` directory.
+The solution was to build the application before creating the Docker image and configure Gradle to always generate a predictable JAR filename (`java-app.jar`).
 
-```text
-build/
-```
-
-Since Jenkins performs a fresh Git checkout for every pipeline execution, no compiled JAR existed until Gradle completed the build stage.
-
-The solution was to:
-
-- Build the application before creating the Docker image.
-- Configure Gradle to always generate a predictable JAR filename.
-
-```groovy
-tasks.named("bootJar") {
-    archiveFileName = "java-app.jar"
-}
-```
-
-The Dockerfile could then consistently reference:
-
-```dockerfile
-COPY build/libs/java-app.jar app.jar
-```
-
-> **Lesson Learned:** CI/CD pipelines should produce predictable build artifacts. Using a fixed JAR filename simplifies Dockerfiles and reduces pipeline complexity.
+> **Lesson Learned:** CI/CD pipelines should always produce predictable build artifacts to simplify Docker image creation.
 
 ---
 
 ### 3. Understanding Amazon EKS Autoscaling Costs
 
-One concept that initially caused confusion was how AWS charges for Auto Scaling.
+Initially, it appeared that configuring a node group with a maximum size of five nodes would incur charges for all five instances.
 
-At first, it seemed that configuring a node group with a maximum size of five nodes would result in charges for all five instances, even if they were not running.
+After reviewing the AWS documentation, it became clear that **AWS charges only for EC2 instances that are actually running**. The maximum node count simply defines the upper scaling limit.
 
-After investigating AWS Auto Scaling, it became clear that AWS charges only for EC2 instances that are actually provisioned and running.
+For more information, see the official AWS documentation:
 
-| Node Group Configuration | Running Instances | Charges |
-|--------------------------|------------------:|---------|
-| Min = 1, Desired = 1, Max = 5 | 1 | Pay for 1 instance |
-| Min = 2, Desired = 2, Max = 5 | 2 | Pay for 2 instances |
-| Autoscaler scales to 5 | 5 | Pay for 5 instances only while they are running |
+https://aws.amazon.com/autoscaling/pricing/
 
-The maximum size simply defines the upper scaling limit—it does not reserve or bill unused EC2 instances.
+> **Lesson Learned:** Properly configuring minimum and maximum node counts helps reduce infrastructure costs while maintaining application availability.
 
-> **Lesson Learned:** Cluster Autoscaler helps reduce infrastructure costs by provisioning EC2 instances only when additional capacity is required and removing them when demand decreases.
+---
+
+### 4. Java Runtime Version Mismatch
+
+During the CI/CD implementation, different parts of the deployment used different Java versions. The application was originally developed with Java 17, while the Jenkins build environment and Docker image later required Java 21.
+
+The solution was to standardize the Java version across the Gradle toolchain, Jenkins environment, Docker image, and application build configuration.
+
+> **Lesson Learned:** Development, build, testing, and production environments should use compatible dependency versions. Clear deployment documentation from developers—including language versions, build tools, runtime dependencies, and base images—helps DevOps engineers build reliable and reproducible deployment pipelines.
 
 </details>
