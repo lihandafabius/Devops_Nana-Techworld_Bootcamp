@@ -880,6 +880,7 @@ IRSA establishes trust between Kubernetes and AWS using the cluster's **OpenID C
 
 ![IRSA Authentication Flow](images/irsa-flow.png)
 
+
 ### Cluster Autoscaler IAM Policy
 
 A custom IAM policy was created to allow the autoscaler to manage the EC2 Auto Scaling Group.
@@ -915,7 +916,7 @@ annotations:
   eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/cluster-autoscaler
 ```
 
-![EKS Role](images/eks-role.png)
+![EKS Role](images/eks_role.png)
 
 
 This allows the Cluster Autoscaler to obtain temporary AWS credentials through AWS STS without storing long-lived access keys inside the cluster.
