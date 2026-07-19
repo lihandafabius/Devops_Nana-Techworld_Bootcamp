@@ -1314,3 +1314,29 @@ The solution was to standardize the Java version across the Gradle toolchain, Je
 > **Best Practice:** Development, build, testing, and production environments should use compatible dependency versions. Clear deployment documentation from developers—including language versions, build tools, runtime dependencies, and base images—helps DevOps engineers build reliable and reproducible deployment pipelines.
 
 </details>
+
+---
+
+## Conclusion
+
+This project demonstrated how to deploy a production-style Java application on Amazon EKS using a combination of managed node groups and AWS Fargate. Along the way, key Kubernetes concepts such as persistent storage, Helm, Ingress, CI/CD automation, IAM integration, and cluster autoscaling were implemented and integrated with AWS services.
+
+Beyond deploying the application, the project provided practical experience troubleshooting real-world infrastructure, storage, authentication, and deployment challenges commonly encountered when operating Kubernetes workloads in the cloud.
+
+---
+
+## When to Use Both Managed Node Groups and AWS Fargate
+
+Amazon EKS allows workloads running on **managed node groups** and **AWS Fargate** to coexist within the same cluster. This provides flexibility to run different types of applications on the most appropriate compute platform.
+
+Some common use cases include:
+
+- **Development and production environments** – Run development or testing workloads on Fargate while production workloads run on managed node groups within the same cluster.
+
+- **Namespace-based isolation** – Configure a Fargate profile so that all pods created in a specific namespace (for example, `dev`) automatically run on Fargate.
+
+- **Label-based scheduling** – Configure Fargate profiles using pod selectors so that only pods with specific labels are scheduled onto Fargate.
+
+- **Stateful and stateless workloads** – Run stateful applications such as MySQL on managed node groups, where direct access to node resources and storage is often preferred, while deploying stateless applications such as web APIs or microservices on Fargate to reduce infrastructure management.
+
+Using both compute options together enables organizations to balance operational simplicity, workload isolation, resource utilization, and infrastructure costs while taking advantage of the strengths of each deployment model.
