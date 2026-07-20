@@ -792,12 +792,13 @@ An ECR repository was first created to store the application images.
 
 ### Authenticate Jenkins with Amazon ECR
 
-Authentication was performed by generating a temporary login password using the AWS CLI.
+Authentication was performed by generating a temporary Amazon ECR authorization token using the AWS CLI.
+
+> **Note:** The authorization token returned by `aws ecr get-login-password` is valid for **12 hours**. After it expires, a new token must be generated before authenticating with Amazon ECR again.
 
 ```bash
 aws ecr get-login-password --region eu-north-1
 ```
-
 The generated credentials were then stored securely in the Jenkins Credentials Store as `ecr-credentials`, allowing the pipeline to authenticate with Amazon ECR without exposing sensitive information.
 
 ### Update the Jenkins Pipeline
