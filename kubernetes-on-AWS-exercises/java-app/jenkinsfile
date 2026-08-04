@@ -5,7 +5,7 @@ pipeline {
 
     environment {
         ECR_REGISTRY = 'java-maven-app'
-        REGISTRY_SERVER = '480007295919.dkr.ecr.eu-north-1.amazonaws.com'
+        REGISTRY_SERVER = <Registry url>
     }
 
     stages {
