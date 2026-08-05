@@ -2,11 +2,11 @@ module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "21.24.1"
 
-  name = "java-app-eks-cluster"
+  name = "${var.environment}-${var.application_name}-eks-cluster"
   kubernetes_version = "1.36"
 
-  subnet_ids = module.java_app_vpc.private_subnets
-  vpc_id = module.java_app_vpc.vpc_id
+  subnet_ids = var.private_subnet_ids
+  vpc_id = var.vpc_id
 
   endpoint_public_access = true
 
@@ -32,10 +32,10 @@ module "eks" {
 
   # EKS Managed Node Group(s)
   eks_managed_node_groups = {
-    dev_eks_managed_node_group = {
+    default = {
 
-      ami_type       = "AL2023_x86_64_STANDARD"
-      instance_types = ["t3.micro"]
+      ami_type       = var.ami_type
+      instance_types = var.instance_types
 
       min_size     = 1
       max_size     = 3
@@ -44,7 +44,7 @@ module "eks" {
   }
 
   fargate_profiles = {
-    dev_fargate_profile = {
+    fargate_profile = {
       selectors = [
         {
           namespace = "java-app"
@@ -54,8 +54,8 @@ module "eks" {
   }
 
   tags = {
-    environment = "dev"
-    application = "java-app"
+    environment = var.environment
+    application = var.application_name
   }
 
 
