@@ -21,13 +21,16 @@ module "eks" {
     vpc-cni                = {
       before_compute = true
     }
-    aws-ebs-csi-driver     = {
+    aws-ebs-csi-driver = {
       before_compute = true
+      pod_identity_association = [
+        {
+          role_arn        = var.ebs_csi_role_arn
+          service_account = "ebs-csi-controller-sa"
+        }
+      ]
     }
-  }
 
-  iam_role_additional_policies = {
-    AmazonEBSCSIDriverPolicy = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
   }
 
   # EKS Managed Node Group(s)

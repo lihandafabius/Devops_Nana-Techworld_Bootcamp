@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: $APP_NAME
+  namespace: java-app
+  labels:
+    app: $APP_NAME
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: $APP_NAME
+  template:
+    metadata:
+      labels:
+        app: $APP_NAME
+    spec:
+      imagePullSecrets:
+      - name: my-registry-key
+      containers:
+      - name: $APP_NAME
+        image: ${REGISTRY_SERVER}/${ECR_REGISTRY}:${IMAGE_NAME}
+        imagePullPolicy: Always # Everytime a pod is created, it will pull the image from the registry. In production, you may want to pin a specific version to avoid unexpected upgrades.
+
+        ports:
+        - containerPort: 8080
+
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "500Mi"
+            cpu: "1Gi"
+
+        env:
+        - name: DB_SERVER
+          valueFrom:
+            configMapKeyRef:
+              name: mysql-config
+              key: DB_SERVER
+
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: mysql-config
+              key: DB_NAME
+
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: DB_USER
+
+        - name: DB_PWD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: DB_PWD
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: $APP_NAME-service
+  namespace: java-app
+spec:
+  selector:
+    app: $APP_NAME
+
+  ports:
+  - port: 8080
+    targetPort: 8080
+
+  type: ClusterIP

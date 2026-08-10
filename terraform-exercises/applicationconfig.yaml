@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config
+  namespace: java-app
+data:
+  DB_SERVER: "mysql-primary.default.svc.cluster.local"
+  DB_NAME: "my_database"

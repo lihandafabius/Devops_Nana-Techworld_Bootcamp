@@ -29,3 +29,8 @@ variable "instance_types" {
   type        = string
   default     = "java-app"
 }
+
+variable "ebs_csi_role_arn" {
+  description = "The ARN of the IAM role for the EBS CSI driver."
+  type        = string
+}

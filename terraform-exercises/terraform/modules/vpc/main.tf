@@ -3,10 +3,7 @@ provider "aws" {
   region = "eu-north-1"
 
 }
-
-
 data "aws_availability_zones" "azs" {}
-
 
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
