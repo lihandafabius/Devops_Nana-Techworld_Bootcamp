@@ -4,7 +4,7 @@ from operator import itemgetter
 ec2_client = boto3.client('ec2', region_name='eu-north-1')
 ec2_resource = boto3.resource('ec2', region_name='eu-north-1')
 
-instance_id = "i-0ddb70c09c6c02d97"
+instance_id = ""
 
 volumes = ec2_client.describe_volumes(
     Filters=[
@@ -56,3 +56,5 @@ while True:
             Device='/dev/sda2'
         )
         break
+
+#### NOTE: Do not forget to add try and except statments and to log errors
