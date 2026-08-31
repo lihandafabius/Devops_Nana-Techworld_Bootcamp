@@ -21,7 +21,7 @@ def create_snapshot():
         print(new_snapshot)
 
 
-schedule.every().day.do(create_snapshot)
+schedule.every(1).seconds.do(create_snapshot)
 
 while True:
     schedule.run_pending()
