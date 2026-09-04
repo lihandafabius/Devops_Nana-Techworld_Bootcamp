@@ -3,6 +3,7 @@ import paramiko
 import requests
 import time
 
+
 def get_default_vpc():
     default_vpc = ec2_client.describe_vpcs(
         Filters=[
@@ -291,3 +292,4 @@ if server_ip:
 
             else:
                 print("Could not restart Nginx.")
+

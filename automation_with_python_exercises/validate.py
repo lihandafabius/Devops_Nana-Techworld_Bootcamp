@@ -1,0 +1,32 @@
+import sys
+import requests
+
+
+server_ip = "16.171.2.166"
+
+selected_image = sys.argv[1]
+
+tag, image_digest = selected_image.split("|")
+
+ports = {
+    "1.0": 3000,
+    "2.0": 80,
+    "3.0": 8080
+}
+
+port = ports[tag]
+
+app_url = f"http://{server_ip}:{port}/status"
+
+try:
+    response = requests.get(app_url, timeout=10)
+
+    if response.status_code == 200:
+        print(f"Application {tag} is running successfully.")
+        print(f"URL: {app_url}")
+        print(f"Response: {response.text}")
+    else:
+        print(f"Application returned status code: {response.status_code}")
+
+except requests.exceptions.RequestException as ex:
+    print(f"Application is not accessible: {ex}")

@@ -1,0 +1,62 @@
+pipeline {
+    agent any
+
+    stages {
+
+        stage('Fetch ECR Images') {
+            steps {
+                script {
+
+                    def images = sh(
+                        script: 'python3 fetch_images.py',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Available images:"
+                    echo images
+
+                    env.IMAGE_LIST = images
+                }
+            }
+        }
+
+        stage('Select Image') {
+            steps {
+                script {
+
+                    def selectedImage = input(
+                        message: 'Select the image to deploy:',
+                        ok: 'Continue',
+                        parameters: [
+                            choice(
+                                name: 'IMAGE',
+                                choices: env.IMAGE_LIST,
+                                description: 'Select an ECR image'
+                            )
+                        ]
+                    )
+
+                    echo "Selected image: ${selectedImage}"
+
+                    env.SELECTED_IMAGE = selectedImage
+                }
+            }
+        }
+
+        stage('Start Container') {
+            steps {
+                sh """
+                    python3 deploy.py '${env.SELECTED_IMAGE}'
+                """
+            }
+        }
+
+        stage('Validate Application') {
+            steps {
+                sh """
+                    python3 validate.py '${env.SELECTED_IMAGE}'
+                """
+            }
+        }
+    }
+}
