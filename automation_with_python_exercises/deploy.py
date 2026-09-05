@@ -1,9 +1,9 @@
 import paramiko
 import sys
 
-server_ip = "13.60.211.189"
+server_ip = ""
 
-ecr_registry = "480007295919.dkr.ecr.eu-north-1.amazonaws.com"
+ecr_registry = "<acount_id>.dkr.ecr.eu-north-1.amazonaws.com"
 repository = "java-maven-app"
 
 ports = {
