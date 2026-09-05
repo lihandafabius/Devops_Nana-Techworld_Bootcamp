@@ -1,3 +1,6 @@
+#!/usr/bin/env
+
+
 pipeline {
     agent any
 
@@ -6,7 +9,6 @@ pipeline {
         stage('Fetch ECR Images') {
             steps {
                 script {
-
                     def images = sh(
                         script: '/opt/jenkins-venv/bin/python fetch_images.py',
                         returnStdout: true
@@ -23,7 +25,6 @@ pipeline {
         stage('Select Image') {
             steps {
                 script {
-
                     def selectedImage = input(
                         message: 'Select the image to deploy:',
                         ok: 'Continue',
@@ -45,17 +46,26 @@ pipeline {
 
         stage('Start Container') {
             steps {
-                sh """
-                    /opt/jenkins-venv/bin/python deploy.py '${env.SELECTED_IMAGE}'
-                """
+                withCredentials([
+                    string(
+                        credentialsId: 'ecr-credentials',
+                        variable: 'ECR_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        /opt/jenkins-venv/bin/python deploy.py \
+                            "$SELECTED_IMAGE" \
+                            "$ECR_PASSWORD"
+                    '''
+                }
             }
         }
 
         stage('Validate Application') {
             steps {
-                sh """
-                    /opt/jenkins-venv/bin/python validate.py '${env.SELECTED_IMAGE}'
-                """
+                sh '''
+                    /opt/jenkins-venv/bin/python validate.py "$SELECTED_IMAGE"
+                '''
             }
         }
     }

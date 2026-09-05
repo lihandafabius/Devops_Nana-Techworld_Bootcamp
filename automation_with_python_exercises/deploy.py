@@ -1,11 +1,11 @@
 import paramiko
 import sys
 
-server_ip = "16.171.2.166"
+server_ip = "13.60.211.189"
 ssh_username = "ubuntu"
 ssh_key = "/home/fabius-lihanda/Downloads/myapp-key-pair.pem"
 
-ecr_registry = "<ACCOUNT_ID>.dkr.ecr.eu-north-1.amazonaws.com"
+ecr_registry = "480007295919.dkr.ecr.eu-north-1.amazonaws.com"
 repository = "java-maven-app"
 
 ports = {
@@ -15,7 +15,9 @@ ports = {
 }
 
 
-def ssh_into_ec2_and_start_container(tag, image_digest):
+def ssh_into_ec2_and_start_container(tag, image_digest, ecr_password):
+
+    ssh = None
 
     try:
         ssh = paramiko.SSHClient()
@@ -36,8 +38,11 @@ def ssh_into_ec2_and_start_container(tag, image_digest):
         host_port = ports[tag]
 
         command = f"""
-aws ecr get-login-password --region eu-north-1 | \
-docker login --username AWS --password-stdin {ecr_registry}
+set -e
+
+docker login \
+    --username AWS \
+    --password-stdin {ecr_registry}
 
 docker pull {ecr_registry}/{repository}@{image_digest}
 
@@ -51,15 +56,23 @@ docker run -d \
 
         stdin, stdout, stderr = ssh.exec_command(command)
 
+        # Send the ECR password to docker login through stdin.
+        stdin.write(ecr_password + "\n")
+        stdin.flush()
+        stdin.channel.shutdown_write()
+
         output = stdout.read().decode()
         error = stderr.read().decode()
+        exit_status = stdout.channel.recv_exit_status()
 
         print(output)
 
         if error:
             print(error)
 
-        ssh.close()
+        if exit_status != 0:
+            print(f"Remote deployment failed with exit code {exit_status}")
+            return False
 
         print(f"Image {tag} deployed successfully.")
         print(f"Application available on port {host_port}")
@@ -70,12 +83,21 @@ docker run -d \
         print(f"Failed to deploy application: {ex}")
         return False
 
+    finally:
+        if ssh:
+            ssh.close()
+
 
 if __name__ == "__main__":
 
-    selected_image = sys.argv[1]
+    if len(sys.argv) != 3:
+        print("Usage: python deploy.py '<tag>|<digest>' '<ecr_password>'")
+        sys.exit(1)
 
-    tag, image_digest = selected_image.split("|")
+    selected_image = sys.argv[1]
+    ecr_password = sys.argv[2]
+
+    tag, image_digest = selected_image.split("|", 1)
 
     print(f"Selected image tag: {tag}")
     print(f"Selected image digest: {image_digest}")
@@ -86,7 +108,8 @@ if __name__ == "__main__":
 
     success = ssh_into_ec2_and_start_container(
         tag,
-        image_digest
+        image_digest,
+        ecr_password
     )
 
     if not success:
