@@ -73,14 +73,21 @@ pipeline {
                 dir('automation_with_python_exercises') {
                     withCredentials([
                         string(
-                            credentialsId: 'ecr-repo-pwd',
+                            credentialsId: 'ecr-credentials',
                             variable: 'ECR_PASSWORD'
+                        ),
+                        sshUserPrivateKey(
+                            credentialsId: 'ssh-creds',
+                            keyFileVariable: 'SSH_KEY',
+                            usernameVariable: 'SSH_USERNAME'
                         )
                     ]) {
                         sh '''
                             /opt/jenkins-venv/bin/python deploy.py \
                                 "$SELECTED_IMAGE" \
-                                "$ECR_PASSWORD"
+                                "$ECR_PASSWORD" \
+                                "$SSH_USERNAME" \
+                                "$SSH_KEY"
                         '''
                     }
                 }

@@ -2,8 +2,6 @@ import paramiko
 import sys
 
 server_ip = "13.60.211.189"
-ssh_username = "ubuntu"
-ssh_key = "/home/fabius-lihanda/Downloads/myapp-key-pair.pem"
 
 ecr_registry = "480007295919.dkr.ecr.eu-north-1.amazonaws.com"
 repository = "java-maven-app"
@@ -15,7 +13,13 @@ ports = {
 }
 
 
-def ssh_into_ec2_and_start_container(tag, image_digest, ecr_password):
+def ssh_into_ec2_and_start_container(
+    tag,
+    image_digest,
+    ecr_password,
+    ssh_username,
+    ssh_key
+):
 
     ssh = None
 
@@ -71,7 +75,10 @@ docker run -d \
             print(error)
 
         if exit_status != 0:
-            print(f"Remote deployment failed with exit code {exit_status}")
+            print(
+                f"Remote deployment failed with exit code "
+                f"{exit_status}"
+            )
             return False
 
         print(f"Image {tag} deployed successfully.")
@@ -80,7 +87,10 @@ docker run -d \
         return True
 
     except Exception as ex:
-        print(f"Failed to deploy application: {ex}")
+        print(
+            f"Failed to deploy application: "
+            f"{type(ex).__name__}: {ex}"
+        )
         return False
 
     finally:
@@ -90,12 +100,20 @@ docker run -d \
 
 if __name__ == "__main__":
 
-    if len(sys.argv) != 3:
-        print("Usage: python deploy.py '<tag>|<digest>' '<ecr_password>'")
+    if len(sys.argv) != 5:
+        print(
+            "Usage: python deploy.py "
+            "'<tag>|<digest>' "
+            "'<ecr_password>' "
+            "'<ssh_username>' "
+            "'<ssh_key_path>'"
+        )
         sys.exit(1)
 
     selected_image = sys.argv[1]
     ecr_password = sys.argv[2]
+    ssh_username = sys.argv[3]
+    ssh_key = sys.argv[4]
 
     tag, image_digest = selected_image.split("|", 1)
 
@@ -109,7 +127,9 @@ if __name__ == "__main__":
     success = ssh_into_ec2_and_start_container(
         tag,
         image_digest,
-        ecr_password
+        ecr_password,
+        ssh_username,
+        ssh_key
     )
 
     if not success:
