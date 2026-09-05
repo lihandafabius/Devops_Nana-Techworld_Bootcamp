@@ -6,9 +6,18 @@ pipeline {
 
     stages {
 
-        stage('Checkout') {
+        stage('Check Workspace') {
             steps {
-                checkout scm
+                sh '''
+                    echo "Current directory:"
+                    pwd
+
+                    echo "Workspace contents:"
+                    ls -la
+
+                    echo "Python files:"
+                    find . -name "*.py" -type f
+                '''
             }
         }
 
