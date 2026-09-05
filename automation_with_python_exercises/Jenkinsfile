@@ -16,18 +16,32 @@ pipeline {
         stage('Fetch ECR Images') {
             steps {
                 script {
-                    def images = sh(
-                        script: '''
-                            cd automation_with_python_exercises
-                            /opt/jenkins-venv/bin/python fetch_images.py
-                        ''',
-                        returnStdout: true
-                    ).trim()
+                    dir('automation_with_python_exercises') {
 
-                    echo "Available images:"
-                    echo images
+                        withCredentials([
+                            string(
+                                credentialsId: 'jenkins_aws_access_key_id',
+                                variable: 'AWS_ACCESS_KEY_ID'
+                            ),
+                            string(
+                                credentialsId: 'jenkins_aws_secret_access_key',
+                                variable: 'AWS_SECRET_ACCESS_KEY'
+                            )
+                        ]) {
 
-                    env.IMAGE_LIST = images
+                            def images = sh(
+                                script: '''
+                                    /opt/jenkins-venv/bin/python fetch_images.py
+                                ''',
+                                returnStdout: true
+                            ).trim()
+
+                            echo "Available images:"
+                            echo images
+
+                            env.IMAGE_LIST = images
+                        }
+                    }
                 }
             }
         }
@@ -56,27 +70,30 @@ pipeline {
 
         stage('Start Container') {
             steps {
-                withCredentials([
-                    string(
-                        credentialsId: 'ecr-credentials',
-                        variable: 'ECR_PASSWORD'
-                    )
-                ]) {
-                    sh '''
-                        sh "cd automation_with_python_exercises"
-                        /opt/jenkins-venv/bin/python deploy.py \
-                            "$SELECTED_IMAGE" \
-                            "$ECR_PASSWORD"
-                    '''
+                dir('automation_with_python_exercises') {
+                    withCredentials([
+                        string(
+                            credentialsId: 'ecr-credentials',
+                            variable: 'ECR_PASSWORD'
+                        )
+                    ]) {
+                        sh '''
+                            /opt/jenkins-venv/bin/python deploy.py \
+                                "$SELECTED_IMAGE" \
+                                "$ECR_PASSWORD"
+                        '''
+                    }
                 }
             }
         }
 
         stage('Validate Application') {
             steps {
-                sh '''
-                    /opt/jenkins-venv/bin/python validate.py "$SELECTED_IMAGE"
-                '''
+                dir('automation_with_python_exercises') {
+                    sh '''
+                        /opt/jenkins-venv/bin/python validate.py "$SELECTED_IMAGE"
+                    '''
+                }
             }
         }
     }
