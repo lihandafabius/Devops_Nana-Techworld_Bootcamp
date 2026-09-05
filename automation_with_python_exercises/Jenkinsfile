@@ -6,6 +6,13 @@ pipeline {
 
     stages {
 
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+
         stage('Fetch ECR Images') {
             steps {
                 script {
