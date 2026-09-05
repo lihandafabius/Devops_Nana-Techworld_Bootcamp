@@ -16,9 +16,11 @@ pipeline {
         stage('Fetch ECR Images') {
             steps {
                 script {
-                    sh "cd automation_with_python_exercises"
                     def images = sh(
-                        script: '/opt/jenkins-venv/bin/python fetch_images.py',
+                        script: '''
+                            cd automation_with_python_exercises
+                            /opt/jenkins-venv/bin/python fetch_images.py
+                        ''',
                         returnStdout: true
                     ).trim()
 
@@ -60,8 +62,8 @@ pipeline {
                         variable: 'ECR_PASSWORD'
                     )
                 ]) {
-                    sh "cd automation_with_python_exercises"
                     sh '''
+                        sh "cd automation_with_python_exercises"
                         /opt/jenkins-venv/bin/python deploy.py \
                             "$SELECTED_IMAGE" \
                             "$ECR_PASSWORD"
