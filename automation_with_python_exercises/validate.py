@@ -2,7 +2,7 @@ import sys
 import requests
 
 
-server_ip = "16.171.2.166"
+server_ip = "13.60.211.189"
 
 selected_image = sys.argv[1]
 
