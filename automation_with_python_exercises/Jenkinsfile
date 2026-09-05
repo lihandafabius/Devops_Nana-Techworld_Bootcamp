@@ -73,7 +73,7 @@ pipeline {
                 dir('automation_with_python_exercises') {
                     withCredentials([
                         string(
-                            credentialsId: 'ecr-credentials',
+                            credentialsId: 'ecr-repo-pwd',
                             variable: 'ECR_PASSWORD'
                         ),
                         sshUserPrivateKey(
@@ -93,6 +93,7 @@ pipeline {
                 }
             }
         }
+
 
         stage('Validate Application') {
             steps {
