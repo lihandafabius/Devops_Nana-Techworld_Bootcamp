@@ -54,7 +54,7 @@ docker rm -f java-maven-app 2>/dev/null || true
 
 docker run -d \
     --name java-maven-app \
-    -p {host_port}:8080 \
+    -p {host_port}:{host_port} \
     {ecr_registry}/{repository}@{image_digest}
 """
 
