@@ -13,16 +13,9 @@ ports = {
     "3.0": 80
 }
 
-paths = {
-    "1.0": "/",
-    "2.0": "/",
-    "3.0": "/"
-}
-
 port = ports[tag]
-path = paths[tag]
 
-app_url = f"http://{server_ip}:{port}{path}"
+app_url = f"http://{server_ip}:{port}/"
 
 try:
     response = requests.get(app_url, timeout=10)
