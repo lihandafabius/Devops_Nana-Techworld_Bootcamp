@@ -8,10 +8,9 @@ repository = "java-maven-app"
 
 ports = {
     "1.0": 3000,
-    "2.0": 80,
-    "3.0": 8080
+    "2.0": 8080,
+    "3.0": 80
 }
-
 
 def ssh_into_ec2_and_start_container(
     tag,
