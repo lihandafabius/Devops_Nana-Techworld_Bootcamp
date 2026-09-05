@@ -6,18 +6,9 @@ pipeline {
 
     stages {
 
-        stage('Check Workspace') {
+        stage('Checkout') {
             steps {
-                sh '''
-                    echo "Current directory:"
-                    pwd
-
-                    echo "Workspace contents:"
-                    ls -la
-
-                    echo "Python files:"
-                    find . -name "*.py" -type f
-                '''
+                checkout scm
             }
         }
 
@@ -25,6 +16,7 @@ pipeline {
         stage('Fetch ECR Images') {
             steps {
                 script {
+                    sh "cd automation_with_python_exercises"
                     def images = sh(
                         script: '/opt/jenkins-venv/bin/python fetch_images.py',
                         returnStdout: true
@@ -68,6 +60,7 @@ pipeline {
                         variable: 'ECR_PASSWORD'
                     )
                 ]) {
+                    sh "cd automation_with_python_exercises"
                     sh '''
                         /opt/jenkins-venv/bin/python deploy.py \
                             "$SELECTED_IMAGE" \
