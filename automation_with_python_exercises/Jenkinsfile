@@ -8,7 +8,7 @@ pipeline {
                 script {
 
                     def images = sh(
-                        script: 'python3 fetch_images.py',
+                        script: '/opt/jenkins-venv/bin/python fetch_images.py',
                         returnStdout: true
                     ).trim()
 
@@ -46,7 +46,7 @@ pipeline {
         stage('Start Container') {
             steps {
                 sh """
-                    python3 deploy.py '${env.SELECTED_IMAGE}'
+                    /opt/jenkins-venv/bin/python deploy.py '${env.SELECTED_IMAGE}'
                 """
             }
         }
@@ -54,7 +54,7 @@ pipeline {
         stage('Validate Application') {
             steps {
                 sh """
-                    python3 validate.py '${env.SELECTED_IMAGE}'
+                    /opt/jenkins-venv/bin/python validate.py '${env.SELECTED_IMAGE}'
                 """
             }
         }
