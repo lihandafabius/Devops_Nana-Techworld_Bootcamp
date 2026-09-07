@@ -64,6 +64,18 @@ pipeline {
             }
         }
 
+        stage('provision cluster') {
+            steps {
+                script {
+                    echo 'provisioning kubernetes cluster...'
+                    dir('terraform-exercises/terraform') {
+                        sh 'terraform init'
+                        sh 'terraform apply -auto-approve'
+                    }
+                }
+            }
+        }
+
         stage('deploy') {
             environment {
                 AWS_ACCESS_KEY_ID = credentials('jenkins_aws_access_key_id')
@@ -73,7 +85,7 @@ pipeline {
             steps {
                 script {
                    echo 'deploying docker image...'
-                   sh 'envsubst < kubernetes-on-AWS-exercises/application-deployment.yaml | kubectl apply -f -'
+                   sh 'envsubst < terraform-exercises/application-deployment.yaml | kubectl apply -f -'
                 }
             }
         }
