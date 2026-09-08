@@ -1,0 +1,59 @@
+---
+- name: Install node and npm
+  hosts: 13.48.43.251
+  become: true
+  tasks:
+    - name: Install nodej ,npm and acl
+      apt:
+        name:
+          - nodejs
+          - npm
+          - acl
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+- name: Create new linux user for nodejs application
+  hosts: 13.48.43.251
+  become: true # execute tasks with elevated privileges
+  tasks:
+    - name: Create linux user
+      user:
+        name: fabi
+        comment: "Nodejs application admin"
+        group: admin
+        system: yes
+
+- name: Deploy nodejs application
+  hosts: 13.48.43.251
+  become: true # execute tasks with elevated privileges
+  become_user: fabi
+  tasks:
+
+    # - name: Copy application files to the server
+    #   copy:
+    #     src: /home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible/nodejs-app/nodejs-app-1.0.0.tgz
+    #     dest: /home/fabi/app-1.0.0.tgz
+
+    - name: Unpack application files
+      unarchive:
+        src: /home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible/nodejs-app/nodejs-app-1.0.0.tgz
+        dest: /home/fabi/
+        # remote_src: yes # Source files should be on the remote server, if we don't set this to yes, ansible will look for the file on the local machine
+
+    - name: Install application dependencies
+      npm:
+        path: /home/fabi/package
+
+    - name: Start the application
+      command:
+        chdir: /home/fabi/package/app
+        cmd: node server.js
+      async: 1000
+      poll: 0
+    
+    - name: Ensure the application is running
+      shell: ps aux | grep node
+      register: app_status
+
+    - debug: msg={{app_status.stdout_lines}}
