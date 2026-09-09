@@ -16,18 +16,27 @@
 - name: Create new linux user for nodejs application
   hosts: 13.48.43.251
   become: true # execute tasks with elevated privileges
+  vars_files:
+    project-vars
   tasks:
     - name: Create linux user
       user:
-        name: fabi
+        name: "{{linux_name}}"
         comment: "Nodejs application admin"
         group: admin
-        system: yes
+        system: yes # create a system user (no home directory, no login shell)
+      register: user_creation_result
+    - debug: msg={{ user_creation_result }}
 
 - name: Deploy nodejs application
   hosts: 13.48.43.251
   become: true # execute tasks with elevated privileges
-  become_user: fabi
+  become_user: "{{linux_name}}"
+  vars_files:
+    project-vars
+  vars:
+    user_home_dir: /home/{{linux_name}} 
+
   tasks:
 
     # - name: Copy application files to the server
@@ -37,17 +46,17 @@
 
     - name: Unpack application files
       unarchive:
-        src: /home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible/nodejs-app/nodejs-app-1.0.0.tgz
-        dest: /home/fabi/
+        src: "{{location}}/nodejs-app-{{version}}.tgz"
+        dest: "{{user_home_dir}}"
         # remote_src: yes # Source files should be on the remote server, if we don't set this to yes, ansible will look for the file on the local machine
 
     - name: Install application dependencies
       npm:
-        path: /home/fabi/package
+        path: "{{user_home_dir}}/package"
 
     - name: Start the application
       command:
-        chdir: /home/fabi/package/app
+        chdir: "{{user_home_dir}}/package/app"
         cmd: node server.js
       async: 1000
       poll: 0
