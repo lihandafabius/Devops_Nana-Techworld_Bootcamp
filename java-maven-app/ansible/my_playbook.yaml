@@ -1,0 +1,41 @@
+---
+- name: Wait for host to be reachable
+  hosts: tag_Name_dev_instance
+  gather_facts: no
+  tasks:
+    - name: Wait for SSH to come up
+      wait_for_connection:
+        delay: 5 # Wait for 5 seconds before starting to check
+        timeout: 120 # Wait for 2 minutes for the host to be reachable
+
+- name: Install Docker 
+  hosts: tag_Name_dev_instance
+  become: yes
+  tasks:
+    - name: Install Docker
+      yum:
+        name: docker
+        update_cache: yes
+        state: present
+    - name: Start Docker daemon
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+- name: Install Docker Compose
+  hosts: tag_Name_dev_instance
+  become: yes
+  tasks:
+    - name: Create Docker Compose directory
+      file:
+        path: ~/.docker/cli-plugins
+        state: directory
+    - name: Get architecture of remote host
+      shell: uname -m
+      register: architecture
+    - name: Download Docker Compose
+      get_url:
+        url: "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-{{ architecture.stdout }}"
+        dest: ~/.docker/cli-plugins/docker-compose
+        mode: +x # Make the file executable
