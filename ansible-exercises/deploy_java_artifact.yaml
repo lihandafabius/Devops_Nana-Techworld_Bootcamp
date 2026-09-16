@@ -1,0 +1,69 @@
+---
+- name: Build Java Gradle application jar
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Build Gradle project
+      command: ./gradlew clean build
+      args:
+        chdir: /home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises
+
+
+- name: Deploy Java application
+  hosts: app_server
+  become: true
+
+  vars_prompt:
+    - name: firstname
+      prompt: "Enter your first name"
+      private: false
+
+  tasks:
+
+    - name: Create linux application user
+      user:
+        name: "{{ firstname }}"
+        state: present
+        create_home: true
+        groups: adm
+
+    - name: Update apt repo and cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install Java
+      apt:
+        name:
+          - openjdk-17-jre-headless
+          - acl
+        state: present
+
+    - name: Check if application is running
+      shell: pgrep -f "java -jar /home/ubuntu/app.jar"
+      register: app_process
+      failed_when: false
+      changed_when: false
+
+    - name: Stop running application
+      shell: "kill {{ app_process.stdout }} || true"
+      when: app_process.rc == 0
+      changed_when: app_process.rc == 0
+
+    - name: Remove old jar file
+      file:
+        path: /home/ubuntu/app.jar
+        state: absent
+
+    - name: Copy new jar artifact
+      copy:
+        src: /home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises/build/libs/build-tools-exercises-1.0-SNAPSHOT.jar
+        dest: /home/ubuntu/app.jar
+        mode: "0644"
+
+    - name: Start Java application
+      shell: |
+        nohup java -jar /home/ubuntu/app.jar > /home/{{ firstname }}/app.log 2>&1 &
+      become_user: "{{ firstname }}"

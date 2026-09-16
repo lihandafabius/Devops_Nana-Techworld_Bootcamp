@@ -1,3 +1,0 @@
-[nexus_server]
-13.50.235.138 ansible_ssh_private_key_file=~/.ssh/myapp-key-pair.pem ansible_user=ubuntu
-

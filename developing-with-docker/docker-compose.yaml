@@ -1,7 +1,6 @@
-version: '3'
 services:
   my-app:
-    image: 258974340194.dkr.ecr.eu-north-1.amazonaws.com/my-app:1.1
+    image: lihanda/demo-app:test-app-1.0
     ports:
      - 3000:3000
   mongodb:
