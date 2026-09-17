@@ -1,0 +1,44 @@
+---
+- name: Push Java artifact to Nexus
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_prompt:
+    - name: jar_file
+      prompt: "Enter the JAR filename"
+      private: false
+
+    - name: nexus_username
+      prompt: "Enter Nexus username"
+      private: false
+
+    - name: nexus_password
+      prompt: "Enter Nexus password"
+      private: true
+
+  vars:
+    nexus_url: "http://13.61.19.95:8081/repository/java-app/"
+    group_id: "com.example"
+    artifact_id: "build-tools-exercises"
+    version: "1.0-SNAPSHOT"
+    jar_path: "/home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises/build/libs/{{ jar_file }}"
+
+  tasks:
+    - name: Check if JAR exists
+      stat:
+        path: "{{ jar_path }}"
+      register: jar_file_status
+
+    - name: Fail if JAR does not exist
+      fail:
+        msg: "JAR file {{ jar_file }} does not exist."
+      when: not jar_file_status.stat.exists
+
+    - name: Upload JAR to Nexus
+      shell: curl -u "{{ nexus_username }}:{{ nexus_password }}" --upload-file "{{ jar_path }}" "{{ nexus_url }}com/example/{{ artifact_id }}/{{ version }}/{{ jar_file }}"
+      no_log: true
+
+    - name: Display success message
+      debug:
+        msg: "Successfully uploaded {{ jar_file }} to Nexus."
