@@ -1,0 +1,153 @@
+---
+- name: Create an EC2 instance
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  # If you have the AWS CLI configured (aws configure), boto3 automatically
+  # picks up your credentials - you don't need to pass them explicitly.
+
+  vars:
+    aws_region: "eu-north-1"
+    instance_type: "t3.small"
+    ami_id: "ami-0aba19e56f3eaec05"
+    key_name: "jenkins"
+    key_file: "~/.ssh/jenkins.pem"   # path to the matching private key on your machine
+    instance_name: "jenkins-server"
+    sg_name: "app-server-sg"
+    ansible_python_interpreter: "/home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises/venv/bin/python"
+
+  tasks:
+    - name: Get my current public IP
+      uri:
+        url: https://api.ipify.org
+        return_content: true
+      register: my_ip
+
+    - name: Create security group with SSH and Jenkins port open to my IP only
+      amazon.aws.ec2_security_group:
+        name: "{{ sg_name }}"
+        description: "Allow SSH and Jenkins traffic from my IP only"
+        region: "{{ aws_region }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 22
+            cidr_ip: "{{ my_ip.content }}/32"
+            rule_desc: "SSH from my IP"
+          - proto: tcp
+            ports:
+              - 8080
+            cidr_ip: "{{ my_ip.content }}/32"
+            rule_desc: "Access Jenkins from my IP"
+      register: sg_result
+
+    - name: Launch EC2 instance
+      amazon.aws.ec2_instance:
+        name: "{{ instance_name }}"
+        key_name: "{{ key_name }}"
+        instance_type: "{{ instance_type }}"
+        image_id: "{{ ami_id }}"
+        region: "{{ aws_region }}"
+        security_group: "{{ sg_name }}"
+        wait: true
+        state: running
+        tags:
+          Environment: "dev"
+      register: ec2_result
+
+    - name: Add new instance to in-memory inventory
+      add_host:
+        name: "{{ ec2_result.instances[0].public_ip_address }}"
+        groups: jenkins
+        ansible_user: ubuntu
+        ansible_ssh_private_key_file: "{{ key_file }}"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+
+    - name: Wait for SSH to come up on the new instance
+      wait_for:
+        host: "{{ ec2_result.instances[0].public_ip_address }}"
+        port: 22
+        delay: 5
+        timeout: 180
+        state: started
+
+- name: Install and run Jenkins with build tools
+  hosts: jenkins
+  become: true
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install Java
+      apt:
+        name:
+          - fontconfig
+          - openjdk-21-jre
+        state: present
+
+    - name: Ensure keyrings directory exists
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Add Jenkins apt key
+      get_url:
+        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+        dest: /etc/apt/keyrings/jenkins-keyring.asc
+        mode: "0644"
+
+    - name: Add Jenkins apt repository
+      apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/"
+        state: present
+        filename: jenkins
+
+    - name: Install Jenkins
+      apt:
+        name: jenkins
+        state: present
+        update_cache: true
+
+    - name: Install Node.js and npm
+      apt:
+        name:
+          - nodejs
+          - npm
+        state: present
+
+    - name: Install Docker
+      apt:
+        name: docker.io # best prctice is to download from official docker repo with certs
+        state: present
+
+    - name: Add Jenkins to Docker group
+      user:
+        name: jenkins
+        groups: docker
+        append: true
+
+    - name: Start Docker
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Start Jenkins
+      service:
+        name: jenkins
+        state: started
+        enabled: true
+
+    - name: Get initial Jenkins admin password
+      command: cat /var/lib/jenkins/secrets/initialAdminPassword
+      register: jenkins_password
+      changed_when: false
+
+    - name: Display Jenkins information
+      debug:
+        msg: "Jenkins is up at {{ inventory_hostname }}. Initial admin password: {{ jenkins_password.stdout }}"
