@@ -1,0 +1,197 @@
+---
+- name: Create an EC2 instance
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_prompt:
+    - name: os_type
+      prompt: "Which OS do you want to install? (ubuntu/amazon_linux)"
+      private: false
+
+  vars:
+    aws_region: "eu-north-1"
+    instance_type: "t3.small"
+
+    ami_ids:
+      ubuntu: "ami-0aba19e56f3eaec05"
+      amazon_linux: "ami-06cfeaaa22092f09d"
+
+    key_name: "jenkins"
+    key_file: "~/.ssh/jenkins.pem"
+    instance_name: "jenkins-server"
+    sg_name: "jenkins-server-sg"
+
+    ansible_python_interpreter: "/home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises/venv/bin/python"
+
+  tasks:
+
+    - name: Set AMI ID
+      set_fact:
+        ami_id: "{{ ami_ids[os_type] }}"
+
+    - name: Get my current public IP
+      uri:
+        url: https://api.ipify.org
+        return_content: true
+      register: my_ip
+
+    - name: Create security group
+      amazon.aws.ec2_security_group:
+        name: "{{ sg_name }}"
+        description: "Allow SSH and Jenkins traffic from my IP only"
+        region: "{{ aws_region }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 22
+            cidr_ip: "{{ my_ip.content }}/32"
+            rule_desc: "SSH from my IP"
+
+          - proto: tcp
+            ports:
+              - 8080
+            cidr_ip: "{{ my_ip.content }}/32"
+            rule_desc: "Access Jenkins from my IP"
+
+    - name: Launch EC2 instance
+      amazon.aws.ec2_instance:
+        name: "{{ instance_name }}"
+        key_name: "{{ key_name }}"
+        instance_type: "{{ instance_type }}"
+        image_id: "{{ ami_id }}"
+        region: "{{ aws_region }}"
+        security_group: "{{ sg_name }}"
+        wait: true
+        state: running
+        tags:
+          Environment: "dev"
+      register: ec2_result
+
+    - name: Add Ubuntu instance to inventory
+      add_host:
+        name: "{{ ec2_result.instances[0].public_ip_address }}"
+        groups: jenkins
+        ansible_user: ubuntu
+        ansible_ssh_private_key_file: "{{ key_file }}"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+        os_type: "{{ os_type }}"
+      when: os_type == "ubuntu"
+
+    - name: Add Amazon Linux instance to inventory
+      add_host:
+        name: "{{ ec2_result.instances[0].public_ip_address }}"
+        groups: jenkins
+        ansible_user: ec2-user
+        ansible_ssh_private_key_file: "{{ key_file }}"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+        os_type: "{{ os_type }}"
+      when: os_type == "amazon_linux"
+
+    - name: Wait for SSH to come up
+      wait_for:
+        host: "{{ ec2_result.instances[0].public_ip_address }}"
+        port: 22
+        delay: 5
+        timeout: 180
+        state: started
+
+
+- name: Install Docker and run Jenkins container
+  hosts: jenkins
+  become: true
+
+  tasks:
+
+    # =========================
+    # Ubuntu
+    # =========================
+
+    - name: Update Ubuntu apt cache
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: os_type == "ubuntu"
+
+    - name: Install Docker on Ubuntu
+      apt:
+        name: docker.io
+        state: present
+      when: os_type == "ubuntu"
+
+
+    # =========================
+    # Amazon Linux
+    # =========================
+
+    - name: Update Amazon Linux packages
+      dnf:
+        name: "*"
+        state: latest
+        update_only: true
+      when: os_type == "amazon_linux"
+
+    - name: Install Docker on Amazon Linux
+      dnf:
+        name: docker
+        state: present
+      when: os_type == "amazon_linux"
+
+
+    # =========================
+    # Common
+    # =========================
+
+    - name: Start Docker
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Check if a Jenkins container already exists
+      command: docker inspect -f "{{ '{{.State.Running}}' }}" jenkins
+      register: jenkins_running
+      failed_when: false # never mark this task as failed, no matter what exit code comes back to let us inspect the actual exit code rc == 0 / != 0
+      changed_when: false # this task never counts as a change, regardless of its exit code or output
+ 
+    - name: Start the existing Jenkins container if it's stopped
+      command: docker start jenkins
+      when: jenkins_running.rc == 0 and jenkins_running.stdout == "false"
+ 
+    - name: Run a new Jenkins container (none exists yet)
+      command: >
+        docker run
+        --name jenkins
+        -p 8080:8080
+        -p 50000:50000
+        -d
+        -u root
+        -v /var/run/docker.sock:/var/run/docker.sock
+        -v /usr/bin/docker:/usr/bin/docker
+        -v jenkins_home:/var/jenkins_home
+        jenkins/jenkins:lts
+      when: jenkins_running.rc != 0
+
+    - name: Wait for Jenkins to be available
+      wait_for:
+        host: "127.0.0.1"
+        port: 8080
+        delay: 5
+        timeout: 120
+        state: started
+
+    - name: Add remote user to Docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: true
+
+    - name: Get initial Jenkins admin password
+      become: false
+      shell: sg docker -c 'docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword'
+      register: jenkins_password
+      changed_when: false
+
+    - name: Display Jenkins information
+      debug:
+        msg: "Jenkins is running at http://{{ inventory_hostname }}:8080. Initial admin password: {{ jenkins_password.stdout }}"
