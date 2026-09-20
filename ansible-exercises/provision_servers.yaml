@@ -1,0 +1,196 @@
+---
+- name: Provision Ansible, Web and Database servers
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    aws_region: "eu-north-1"
+    availability_zone: "eu-north-1a"
+    vpc_name: "Java-gradle-app-vpc"
+    public_subnet_name: "Java-gradle-app-public-subnet"
+    private_subnet_name: "Java-gradle-app-private-subnet"
+
+    instance_type: "t3.small"
+    key_name: "jenkins"
+    ami_id: "ami-0aba19e56f3eaec05" # ubuntu ami id
+    key_file: "~/.ssh/myapp-key-pair.pem"
+
+    ansible_python_interpreter: "/home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises/venv/bin/python"
+
+  tasks:
+
+    # GET EXISTING VPC AND SUBNETS INFORMATION
+ 
+    - name: Get VPC information
+      amazon.aws.ec2_vpc_net_info:
+        region: "{{ aws_region }}"
+        filters:
+          "tag:Name": "{{ vpc_name }}"
+      register: vpc_info
+
+    - name: Get public subnet information
+      amazon.aws.ec2_vpc_subnet_info:
+        region: "{{ aws_region }}"
+        filters:
+          "tag:Name": "{{ public_subnet_name }}"
+      register: public_subnet_info
+
+    - name: Get private subnet information
+      amazon.aws.ec2_vpc_subnet_info:
+        region: "{{ aws_region }}"
+        filters:
+          "tag:Name": "{{ private_subnet_name }}"
+      register: private_subnet_info
+
+    - name: Check if networking resources exist
+      debug:
+        msg: "VPC or required subnets were not found."
+      when:
+        - vpc_info.vpcs | length == 0
+        - public_subnet_info.subnets | length == 0
+        - private_subnet_info.subnets | length == 0
+
+    - name: Set network IDs
+      set_fact:
+        vpc_id: "{{ vpc_info.vpcs[0].vpc_id }}"
+        public_subnet_id: "{{ public_subnet_info.subnets[0].id }}"
+        private_subnet_id: "{{ private_subnet_info.subnets[0].id }}"
+
+    # GET MY PUBLIC IP
+
+    - name: Get my current public IP
+      uri:
+        url: https://api.ipify.org
+        return_content: true
+      register: my_ip
+
+    # ANSIBLE SECURITY GROUP
+
+    - name: Create Ansible security group
+      amazon.aws.ec2_security_group:
+        name: "control-node-sg"
+        description: "Security group for Ansible control plane"
+        vpc_id: "{{ vpc_id }}"
+        region: "{{ aws_region }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 22
+            cidr_ip: "{{ my_ip.content }}/32"
+            rule_desc: "SSH from my IP"
+      register: control_node_sg
+
+    # WEB SECURITY GROUP
+
+    - name: Create Web security group
+      amazon.aws.ec2_security_group:
+        name: "app-server-sg"
+        description: "Security group for Java web server"
+        vpc_id: "{{ vpc_id }}"
+        region: "{{ aws_region }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 22
+            group_id: "{{ control_node_sg.group_id }}"
+            rule_desc: "SSH from Ansible server"
+
+          - proto: tcp
+            ports:
+              - 8080
+            cidr_ip: "{{ my_ip.content }}/32"
+            rule_desc: "Java application from my IP"
+      register: web_server_sg
+
+    # DATABASE SECURITY GROUP
+
+    - name: Create Database security group
+      amazon.aws.ec2_security_group:
+        name: "db-server-sg"
+        description: "Security group for MySQL database"
+        vpc_id: "{{ vpc_id }}"
+        region: "{{ aws_region }}"
+        rules:
+          - proto: tcp
+            ports:
+              - 22
+            group_id: "{{ control_node_sg.group_id }}"
+            rule_desc: "SSH from Ansible server"
+
+          - proto: tcp
+            ports:
+              - 3306
+            group_id: "{{ web_server_sg.group_id }}"
+            rule_desc: "MySQL from Web server"
+      register: db_server_sg
+
+    # ANSIBLE SERVER
+
+    - name: Provision Ansible control plane
+      amazon.aws.ec2_instance:
+        name: "Java-gradle-app-ansible-server"
+        key_name: "{{ key_name }}"
+        instance_type: "{{ instance_type }}"
+        image_id: "{{ ami_id }}"
+        region: "{{ aws_region }}"
+        vpc_subnet_id: "{{ public_subnet_id }}"
+        security_groups:
+          - "{{ control_node_sg.group_id }}"
+        network_interfaces:
+          - assign_public_ip: true
+        wait: true
+        state: running
+        tags:
+          Name: "Java-gradle-app-ansible-server"
+          Role: "ansible-control-plane"
+      register: ansible_server
+
+    # WEB SERVER
+
+    - name: Provision Web server
+      amazon.aws.ec2_instance:
+        name: "Java-gradle-app-web-server"
+        key_name: "{{ key_name }}"
+        instance_type: "{{ instance_type }}"
+        image_id: "{{ ami_id }}"
+        region: "{{ aws_region }}"
+        vpc_subnet_id: "{{ public_subnet_id }}"
+        security_groups:
+          - "{{ web_server_sg.group_id }}"
+        network_interfaces:
+          - assign_public_ip: true
+        wait: true
+        state: running
+        tags:
+          Name: "Java-gradle-app-web-server"
+          Role: "web-server"
+      register: web_server
+
+    # DATABASE SERVER
+
+    - name: Provision Database server
+      amazon.aws.ec2_instance:
+        name: "Java-gradle-app-db-server"
+        key_name: "{{ key_name }}"
+        instance_type: "{{ instance_type }}"
+        image_id: "{{ ami_id }}"
+        region: "{{ aws_region }}"
+        vpc_subnet_id: "{{ private_subnet_id }}"
+        security_groups:
+          - "{{ db_server_sg.group_id }}"
+        network_interfaces:
+          - assign_public_ip: false
+        wait: true
+        state: running
+        tags:
+          Name: "Java-gradle-app-db-server"
+          Role: "database-server"
+      register: db_server
+
+    - name: Display server information
+      debug:
+        msg:
+          - "Control node public IP: {{ ansible_server.instances[0].public_ip_address }}"
+          - "Web server public IP: {{ web_server.instances[0].public_ip_address }}"
+          - "Database server private IP: {{ db_server.instances[0].private_ip_address }}"
