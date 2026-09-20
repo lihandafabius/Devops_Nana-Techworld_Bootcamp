@@ -64,6 +64,5 @@
         mode: "0644"
 
     - name: Start Java application
-      shell: |
-        nohup java -jar /home/ubuntu/app.jar > /home/{{ firstname }}/app.log 2>&1 &
+      shell: nohup java -jar /home/ubuntu/app.jar > /home/{{ firstname }}/app.log 2>&1 &
       become_user: "{{ firstname }}"
