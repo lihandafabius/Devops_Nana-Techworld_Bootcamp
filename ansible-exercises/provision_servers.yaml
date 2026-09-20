@@ -12,7 +12,7 @@
     private_subnet_name: "Java-gradle-app-private-subnet"
 
     instance_type: "t3.small"
-    key_name: "jenkins"
+    key_name: "myapp-key-pair"
     ami_id: "ami-0aba19e56f3eaec05" # ubuntu ami id
     key_file: "~/.ssh/myapp-key-pair.pem"
 
