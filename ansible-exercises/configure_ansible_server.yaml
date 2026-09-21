@@ -4,27 +4,16 @@
   connection: local
   gather_facts: false
 
+  vars_files:
+    - project-vars
+
   vars:
-    aws_region: "eu-north-1"
-
-    control_server_name: "Java-gradle-app-ansible-server"
-    web_server_name: "Java-gradle-app-web-server"
-    db_server_name: "Java-gradle-app-db-server"
-
-    ssh_user: "ubuntu"
-    ssh_key: "~/.ssh/myapp-key-pair.pem"
-
-    project_dir: "/home/ubuntu/ansible-project"
-    local_project_dir: "/home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises"
-    local_jar_path: "{{ local_project_dir }}/build/libs/build-tools-exercises-1.0-SNAPSHOT.jar"
 
     ansible_python_interpreter: "/home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises/venv/bin/python"
 
   tasks:
 
-    # ---------------------------------------------------------
     # GET ALL THREE SERVERS
-    # ---------------------------------------------------------
 
     - name: Get Ansible control server information
       amazon.aws.ec2_instance_info:
@@ -62,13 +51,10 @@
       set_fact:
         control_server_ip: "{{ control_server.instances[0].public_ip_address }}"
         web_server_private_ip: "{{ web_server.instances[0].private_ip_address }}"
+        web_server_public_ip: "{{ web_server.instances[0].public_ip_address }}"
         db_server_private_ip: "{{ db_server.instances[0].private_ip_address }}"
 
-    # ---------------------------------------------------------
     # ADD CONTROL SERVER TO INVENTORY
-    # Connection details set ONCE here - every task in the next play
-    # inherits them automatically, no repetition needed.
-    # ---------------------------------------------------------
 
     - name: Add control server to in-memory inventory
       add_host:
@@ -77,7 +63,6 @@
         ansible_user: "{{ ssh_user }}"
         ansible_ssh_private_key_file: "{{ ssh_key }}"
         ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
-        ansible_python_interpreter: /usr/bin/python3
 
     - name: Wait for SSH on the control server
       wait_for:
@@ -89,18 +74,15 @@
 - name: Configure the control server and stage deployment files on it
   hosts: ansible_control
 
+  vars_files:
+    - project-vars
+
   vars:
-    ssh_user: "ubuntu"
-    ssh_key: "~/.ssh/myapp-key-pair.pem"
-    project_dir: "/home/ubuntu/ansible-project"
-    local_project_dir: "/home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises"
-    local_jar_path: "{{ local_project_dir }}/build/libs/build-tools-exercises-1.0-SNAPSHOT.jar"
+    ansible_python_interpreter: /usr/bin/python3
 
   tasks:
 
-    # ---------------------------------------------------------
     # INSTALL PYTHON, PIP AND ANSIBLE
-    # ---------------------------------------------------------
 
     - name: Install Python and pip on control server
       apt:
@@ -113,9 +95,7 @@
         update_cache: true
       become: true
 
-    # ---------------------------------------------------------
     # CREATE ANSIBLE PROJECT DIRECTORY
-    # ---------------------------------------------------------
 
     - name: Create project directory
       ansible.builtin.file:
@@ -126,18 +106,14 @@
         mode: "0755"
       become: true
 
-    # ---------------------------------------------------------
     # INSTALL EXISTING MYSQL ROLE
-    # ---------------------------------------------------------
 
     - name: Install MySQL role
       ansible.builtin.command:
         cmd: ansible-galaxy role install geerlingguy.mysql
       changed_when: false
 
-    # ---------------------------------------------------------
     # CREATE SSH DIRECTORY
-    # ---------------------------------------------------------
 
     - name: Create SSH directory
       ansible.builtin.file:
@@ -148,9 +124,7 @@
         mode: "0700"
       become: true
 
-    # ---------------------------------------------------------
     # COPY SSH PRIVATE KEY
-    # ---------------------------------------------------------
 
     - name: Copy SSH private key to control server
       ansible.builtin.copy:
@@ -161,26 +135,22 @@
         mode: "0600"
       become: true
 
-    # ---------------------------------------------------------
-    # BUILD AND COPY INVENTORY.INI (web/db by PRIVATE IP)
-    # ---------------------------------------------------------
+    # BUILD AND COPY INVENTORY.INI
 
     - name: Copy inventory.ini
       ansible.builtin.copy:
         dest: "{{ project_dir }}/inventory.ini"
         content: |
           [web]
-          {{ hostvars['localhost'].web_server_private_ip }} ansible_host={{ hostvars['localhost'].web_server_private_ip }} ansible_user={{ ssh_user }} ansible_ssh_private_key_file=~/.ssh/myapp-key-pair.pem
+          {{ hostvars['localhost'].web_server_private_ip }} ansible_host={{ hostvars['localhost'].web_server_private_ip }} ansible_user={{ ssh_user }} ansible_ssh_private_key_file=~/.ssh/myapp-key-pair.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'
 
           [db]
-          {{ hostvars['localhost'].db_server_private_ip }} ansible_host={{ hostvars['localhost'].db_server_private_ip }} ansible_user={{ ssh_user }} ansible_ssh_private_key_file=~/.ssh/myapp-key-pair.pem
+          {{ hostvars['localhost'].db_server_private_ip }} ansible_host={{ hostvars['localhost'].db_server_private_ip }} ansible_user={{ ssh_user }} ansible_ssh_private_key_file=~/.ssh/myapp-key-pair.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'
         owner: "{{ ssh_user }}"
         group: "{{ ssh_user }}"
         mode: "0644"
 
-    # ---------------------------------------------------------
     # COPY THE BUILT JAR
-    # ---------------------------------------------------------
 
     - name: Copy jar file
       ansible.builtin.copy:
@@ -190,9 +160,7 @@
         group: "{{ ssh_user }}"
         mode: "0644"
 
-    # ---------------------------------------------------------
-    # COPY THE DEPLOY PLAYBOOK
-    # ---------------------------------------------------------
+    # COPY WEB AND DB DEPLOY PLAYBOOK
 
     - name: Copy web and database deploy playbook
       ansible.builtin.copy:
@@ -201,3 +169,20 @@
         owner: "{{ ssh_user }}"
         group: "{{ ssh_user }}"
         mode: "0644"
+
+    # RUN THE WEB AND DB DEPLOY PLAYBOOK ON THE CONTROL SERVER
+
+    - name: Run deploy_app_server_and_db.yaml on the control server
+      ansible.builtin.command:
+        cmd: >
+          ansible-playbook -i inventory.ini deploy_app_server_and_db.yaml
+          --extra-vars "web_public_ip={{ hostvars['localhost'].web_server_public_ip }}"
+        chdir: "{{ project_dir }}"
+      register: deploy_result
+      changed_when: true
+
+    - debug:
+        var: deploy_result.stdout_lines
+
+    - debug:
+        msg: "App running at http://{{ hostvars['localhost'].web_server_public_ip }}:8080"

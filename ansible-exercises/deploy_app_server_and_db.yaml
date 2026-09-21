@@ -2,16 +2,29 @@
 - name: Install and start MySQL on the database server
   hosts: db
   become: true
+
+  pre_tasks:
+    - name: Create MySQL native_password override file on the control server
+      copy:
+        dest: "/home/ubuntu/mysql-native-password-override.cnf"
+        content: |
+          [mysqld]
+          mysql_native_password=ON
+      delegate_to: localhost
+      become: false
+
   vars:
-    mysql_root_password: "ChangeMeRoot123!"
+    mysql_root_password: "rootpass"
     mysql_bind_address: "0.0.0.0"   # role defaults to 127.0.0.1 - must open this for the web server to connect remotely
+    mysql_config_include_files:
+      - src: "/home/ubuntu/mysql-native-password-override.cnf"
     mysql_databases:
       - name: appdb
     mysql_users:
       - name: appuser
-        password: "ChangeMeApp123!"
+        password: "userpass"
         priv: "appdb.*:ALL"
-        host: "%"   # allow connections from any host in the VPC (locked down at the network/SG level instead)
+        host: "%"   # allow connections from any host in the VPC
 
   roles:
     - geerlingguy.mysql
@@ -19,32 +32,43 @@
 - name: Deploy and run the Java web application
   hosts: web
   become: true
+
   vars:
     app_user: "appadmin"
     remote_app_dir: "/opt/java-app"
     jar_name: "build-tools-exercises-1.0-SNAPSHOT.jar"
-    local_jar_path: "/home/{{ ansible_user }}/build-tools-exercises-1.0-SNAPSHOT.jar"   # copied here by configure-ansible-server.yml
+
+    local_jar_path: "/home/ubuntu/ansible-project/build-tools-exercises-1.0-SNAPSHOT.jar"
+
     db_host: "{{ hostvars[groups['db'][0]]['ansible_host'] }}"
     db_name: "appdb"
     db_user: "appuser"
-    db_password: "ChangeMeApp123!"
+    db_password: "userpass"
+
+    web_public_ip: "{{ ansible_host }}"
 
   tasks:
-    - name: Install Java 17
-      apt:
-        name: openjdk-17-jre-headless
+
+    - name: Create linux application user
+      user:
+        name: "{{ app_user }}"
         state: present
+        create_home: true
+        groups: adm
+
+    - name: Update apt repo and cache
+      apt:
         update_cache: true
         cache_valid_time: 3600
 
-    - name: Create linux user to run the application
-      user:
-        name: "{{ app_user }}"
-        system: true
-        create_home: false
-        shell: /usr/sbin/nologin
+    - name: Install Java
+      apt:
+        name:
+          - openjdk-17-jre-headless
+          - acl
+        state: present
 
-    - name: Ensure application directory exists
+    - name: Create application directory
       file:
         path: "{{ remote_app_dir }}"
         state: directory
@@ -52,54 +76,53 @@
         group: "{{ app_user }}"
         mode: "0755"
 
-    - name: Check whether the application is currently running
-      shell: "pgrep -f {{ jar_name }} || true"
-      register: running_pid
+    - name: Check if application is running
+      shell: "pgrep -f 'java -jar {{ remote_app_dir }}/{{ jar_name }}'"
+      register: app_process
+      failed_when: false
       changed_when: false
 
-    - name: Stop the application if it's running
-      shell: "pkill -f {{ jar_name }}"
-      when: running_pid.stdout != ""
+    - name: Stop running application
+      shell: "kill {{ app_process.stdout }} || true"
+      when: app_process.rc == 0
+      changed_when: true
 
-    - name: Wait for the old process to fully exit
-      shell: "pgrep -f {{ jar_name }} || true"
-      register: still_running
-      until: still_running.stdout == ""
-      retries: 5
-      delay: 2
-      when: running_pid.stdout != ""
+    - name: Remove old jar file
+      file:
+        path: "{{ remote_app_dir }}/{{ jar_name }}"
+        state: absent
 
-    - name: Copy jar file to the application directory
+    - name: Copy new jar artifact
       copy:
         src: "{{ local_jar_path }}"
         dest: "{{ remote_app_dir }}/{{ jar_name }}"
         owner: "{{ app_user }}"
         group: "{{ app_user }}"
-        mode: "0755"
-        # src defaults to a path on the machine running ansible-playbook (the
-        # control server, since that's where this playbook executes from) -
-        # configure-ansible-server.yml already placed the jar there for us.
+        mode: "0644"
 
-    - name: Start the application with DB connection details
+    - name: Start Java application
       become_user: "{{ app_user }}"
       environment:
         DB_USER: "{{ db_user }}"
         DB_PWD: "{{ db_password }}"
-        DB_SERVER: "{{ db_host }}"   # hostname/IP only, no port - matches datasource.setServerName()
+        DB_SERVER: "{{ db_host }}"
         DB_NAME: "{{ db_name }}"
-      shell: >
-        nohup java -jar {{ remote_app_dir }}/{{ jar_name }}
-        > {{ remote_app_dir }}/app.log 2>&1 &
-        > {{ remote_app_dir }}/app.log 2>&1 &
-      async: 1000
-      poll: 0
+      shell: |
+        cd "{{ remote_app_dir }}"
+        nohup java -jar "{{ jar_name }}" > app.log 2>&1 &
 
-    - name: Confirm the application started
-      shell: "pgrep -f {{ jar_name }}"
-      register: verify_result
-      until: verify_result.rc == 0
+    - name: Check that application is running
+      shell: "pgrep -f 'java -jar {{ remote_app_dir }}/{{ jar_name }}'"
+      register: app_process
+      until: app_process.rc == 0
       retries: 5
       delay: 2
+      changed_when: false
 
-    - debug:
-        msg: "App running at http://{{ ansible_host }}:8080 - connected to db at {{ db_host }}"
+    - name: Check that port 8080 is listening
+      shell: "ss -lnt | grep ':8080 '"
+      register: port_check
+      until: port_check.rc == 0
+      retries: 10
+      delay: 2
+      changed_when: false

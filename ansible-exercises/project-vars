@@ -1,0 +1,12 @@
+aws_region: "eu-north-1"
+
+control_server_name: "Java-gradle-app-ansible-server"
+web_server_name: "Java-gradle-app-web-server"
+db_server_name: "Java-gradle-app-db-server"
+
+ssh_user: "ubuntu"
+ssh_key: "~/.ssh/myapp-key-pair.pem"
+
+project_dir: "/home/ubuntu/ansible-project"
+local_project_dir: "/home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises"
+local_jar_path: "{{ local_project_dir }}/build/libs/build-tools-exercises-1.0-SNAPSHOT.jar"
