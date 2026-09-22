@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mysql-java-app-ingress
+  namespace: java-app
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: ac2d0df3d9ce64d24856591ed88bba67-1955520985.eu-north-1.elb.amazonaws.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: java-mysql-app-service
+            port:
+              number: 8080
