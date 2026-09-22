@@ -4,5 +4,5 @@ metadata:
   name: mysql-config
   namespace: java-app
 data:
-  DB_SERVER: "mysql.java-app.svc.cluster.local"
+  DB_SERVER: "mysql-primary.java-app.svc.cluster.local"
   DB_NAME: "appdb"

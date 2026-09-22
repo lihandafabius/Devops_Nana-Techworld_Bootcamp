@@ -1,0 +1,91 @@
+---
+- name: Deploy java mysql app to k8's cluster
+  hosts: localhost
+  vars_files:
+    - project-vars
+
+  vars:
+    ansible_python_interpreter: "/home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises/venv/bin/python"
+    kubeconfig: "/home/fabius-lihanda/Devops/terraform/eks_cluster/kubeconfig_myapp_eks_cluster.yaml"
+    manifest_dir: "/home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises/k8_manifests"
+    docker_app_dir: "/home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises"
+    docker_image: "{{ docker_username }}/demo-app:java-app-3.0"
+
+  tasks:
+    - name: Log in to Docker Hub
+      community.docker.docker_login:
+        username: "{{ docker_username }}"
+        password: "{{ docker_password }}"
+
+    - name: Build Docker image for Java App
+      community.docker.docker_image:
+        build:
+          path: "{{ docker_app_dir }}"
+        name: "{{ docker_image }}"
+        source: build
+        force_source: true
+
+    - name: Push Java App image to Docker Hub
+      community.docker.docker_image:
+        name: "{{ docker_image }}"
+        push: true
+        source: local
+
+    - name: Create java app namespace
+      kubernetes.core.k8s:
+        name: java-app
+        api_version: v1
+        kind: Namespace
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+
+    - name: Create a storage class for persistent storage
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/storageclass.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+
+    # - name: Add Bitnami Helm Repository
+    #   kubernetes.core.helm_repository:
+    #     name: bitnami
+    #     repo_url: https://charts.bitnami.com/bitnami
+
+    - name: Deploy MySQL via Helm charts
+      kubernetes.core.helm:
+        name: mysql
+        chart_ref: bitnami/mysql
+        release_namespace: java-app
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ manifest_dir }}/helm-mysql-values.yaml"
+
+    - name: Apply mysql configmap
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/applicationconfig.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+
+    - name: Deploy Java Application and Service
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/application-deployment.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+
+    - name: Add NGINX Ingress Repository
+      kubernetes.core.helm_repository:
+        name: ingress-nginx
+        repo_url: https://kubernetes.github.io/ingress-nginx
+
+    - name: Deploy NGINX Ingress Controller via Helm
+      kubernetes.core.helm:
+        name: ingress-nginx
+        chart_ref: ingress-nginx/ingress-nginx
+        release_namespace: ingress-nginx
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig }}"
+
+    - name: Apply Ingress rule for Java App
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/ingress.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"

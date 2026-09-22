@@ -3,4 +3,4 @@ build
 out
 .gradle*
 *venv
-*vars
+project-vars
