@@ -1,26 +1,29 @@
 architecture: replication
+
 primary:
   persistence:
-    storageClass: "auto-ebs" # custom storage class for the primary mysql instance.
+    storageClass: gp2
 
 secondary:
   replicaCount: 2
+
   persistence:
-    storageClass: "auto-ebs" # custom storage class for the secondary mysql instances.
+    storageClass: gp2
 
 auth:
-  username: myuser 
-  password: "mypassword"
-  rootPassword: "rootpass"
-  replicationUser: replicator # replication user for the secondary mysql instances.
-  replicationPassword: "replica123"
+  username: myuser
+  password: mypassword
+  database: "appdb"
+  rootPassword: rootpassword
+
+  replicationUser: replicator
+  replicationPassword: replica123
 
 global:
   security:
-    allowInsecureImages: True
+    allowInsecureImages: true
+
 image:
   registry: docker.io
-  tag: latest # in prod, pin a specific version to avoid unexpected upgrades
-  repository: bitnamilegacy/mysql 
-
-
+  repository: bitnamilegacy/mysql
+  tag: latest

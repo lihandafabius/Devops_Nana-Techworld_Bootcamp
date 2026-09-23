@@ -38,17 +38,38 @@
         kind: Namespace
         state: present
         kubeconfig: "{{ kubeconfig }}"
-
-    - name: Create a storage class for persistent storage
+    
+    - name: Create Docker registry secret for image pull
       kubernetes.core.k8s:
-        src: "{{ manifest_dir }}/storageclass.yaml"
-        state: present
         kubeconfig: "{{ kubeconfig }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: my-registry-key
+            namespace: java-app
+          type: kubernetes.io/dockerconfigjson
+          stringData:
+            .dockerconfigjson: "{{ {'auths': {'https://index.docker.io/v1/': {'username': docker_username, 'password': docker_password, 'auth': (docker_username + ':' + docker_password) | b64encode}}} | to_json }}"
 
+    # used if we do not have Bitnami Helm Repo installed
     # - name: Add Bitnami Helm Repository
     #   kubernetes.core.helm_repository:
     #     name: bitnami
     #     repo_url: https://charts.bitnami.com/bitnami
+
+    - name: Apply mysql secret
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/mysql_secret.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+
+    - name: Apply mysql configmap
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/applicationconfig.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
 
     - name: Deploy MySQL via Helm charts
       kubernetes.core.helm:
@@ -58,12 +79,6 @@
         kubeconfig: "{{ kubeconfig }}"
         values_files:
           - "{{ manifest_dir }}/helm-mysql-values.yaml"
-
-    - name: Apply mysql configmap
-      kubernetes.core.k8s:
-        src: "{{ manifest_dir }}/applicationconfig.yaml"
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
 
     - name: Deploy Java Application and Service
       kubernetes.core.k8s:

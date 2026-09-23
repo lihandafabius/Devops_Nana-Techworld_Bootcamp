@@ -39,12 +39,6 @@
         state: present
         kubeconfig: "{{ kubeconfig }}"
 
-    - name: Create a storage class for persistent storage
-      kubernetes.core.k8s:
-        src: "{{ manifest_dir }}/storageclass.yaml"
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-
     - name: Apply mysql secret
       kubernetes.core.k8s:
         src: "{{ manifest_dir }}/mysql_secret.yaml"
