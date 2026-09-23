@@ -1,8 +1,8 @@
-# 🤖 Ansible Automation – Provisioning, Configuration and Kubernetes Deployment Pipelines
+# 🤖 Automation with Ansible – Provisioning, Configuration and Kubernetes Deployment Pipelines
 
-This project demonstrates how a series of manual, error-prone deployment tasks were progressively automated using **Ansible**, moving from a single-command jar deployment all the way up to a fully automated, Kubernetes-based application rollout.
+Manual infrastructure work doesn't scale well — the same steps repeated across servers eventually drift apart, break under time pressure, or end up understood by only one person. Ansible solves this by letting infrastructure be defined once, as code: it's agentless (driving everything over plain SSH, no software required on target machines) and idempotent (running the same playbook twice produces the same safe result, not double the side effects), which means a deployment process can be version-controlled, reviewed, and handed to anyone to run with confidence.
 
-The work is organized as eight standalone exercises, each building on skills from the last. Early exercises focus on classic VM-based automation: building and deploying a Java artifact, publishing it to Nexus, and standing up Jenkins in three different flavors (EC2, plain Ubuntu, Docker container). The middle exercises introduce multi-server AWS provisioning with private networking, where a dedicated Ansible control server is used to reach a database server that has no public IP at all. The final exercises move the same application onto Kubernetes (Amazon EKS), first with hand-written manifests and then with a Helm-based, highly-available MySQL deployment — all still driven end-to-end by Ansible so the underlying platform stays hidden from the people who just want to hit "deploy."
+This project walks through eight exercises that build on each other — starting with a single-command Java artifact deployment, moving through multi-server AWS provisioning with private networking, and finishing with a Kubernetes-based deployment pipeline — each one turning a manual process into something repeatable and automated end to end.
 
 ## Project Objectives
 
