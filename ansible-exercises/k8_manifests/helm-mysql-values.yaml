@@ -13,7 +13,7 @@ secondary:
 auth:
   username: myuser
   password: mypassword
-  database: "appdb"
+  database: "appdb" # if you do not pass your db name the default will be my_database
   rootPassword: rootpassword
 
   replicationUser: replicator

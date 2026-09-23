@@ -5,4 +5,4 @@ metadata:
   namespace: java-app
 data:
   DB_SERVER: "mysql-primary.java-app.svc.cluster.local"
-  DB_NAME: "appdb"
+  DB_NAME: "appdb" 
