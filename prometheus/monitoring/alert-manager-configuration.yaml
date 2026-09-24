@@ -1,0 +1,17 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: main-rules-alert-config
+  namespace: monitoring
+spec:
+  receivers:
+  - name: 'email'
+    emailConfigs:
+    - to: 'nana.janashia@nnsoftware.at'
+      from: 'nana.janashia@nnsoftware.at'
+      smarthost: 'smtp.gmail.com:587'
+      authUsername: 'nana.janashia@nnsoftware.at'
+      authIdentity: 'nana.janashia@nnsoftware.at'
+      authPassword:
+        name: gmail-auth
+        key: password
