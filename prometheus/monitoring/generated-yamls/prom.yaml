@@ -1,22 +1,24 @@
 Name:               prometheus-monitoring-kube-prometheus-prometheus
 Namespace:          monitoring
-CreationTimestamp:  Thu, 04 Jul 2024 15:01:33 +0100
+CreationTimestamp:  Thu, 24 Sep 2026 13:53:49 +0100
 Selector:           app.kubernetes.io/instance=monitoring-kube-prometheus-prometheus,app.kubernetes.io/managed-by=prometheus-operator,app.kubernetes.io/name=prometheus,operator.prometheus.io/name=monitoring-kube-prometheus-prometheus,operator.prometheus.io/shard=0,prometheus=monitoring-kube-prometheus-prometheus
 Labels:             app=kube-prometheus-stack-prometheus
-                    app.kubernetes.io/instance=monitoring
-                    app.kubernetes.io/managed-by=Helm
+                    app.kubernetes.io/instance=monitoring-kube-prometheus-prometheus
+                    app.kubernetes.io/managed-by=prometheus-operator
+                    app.kubernetes.io/name=prometheus
                     app.kubernetes.io/part-of=kube-prometheus-stack
-                    app.kubernetes.io/version=61.2.0
-                    chart=kube-prometheus-stack-61.2.0
+                    app.kubernetes.io/version=91.5.1
+                    chart=kube-prometheus-stack-91.5.1
                     heritage=Helm
                     managed-by=prometheus-operator
                     operator.prometheus.io/mode=server
                     operator.prometheus.io/name=monitoring-kube-prometheus-prometheus
                     operator.prometheus.io/shard=0
+                    prometheus=monitoring-kube-prometheus-prometheus
                     release=monitoring
 Annotations:        meta.helm.sh/release-name: monitoring
                     meta.helm.sh/release-namespace: monitoring
-                    prometheus-operator-input-hash: 17805436631142976784
+                    prometheus-operator-input-hash: 2350200934948507209
 Replicas:           1 desired | 1 total
 Update Strategy:    RollingUpdate
 Pods Status:        1 Running / 0 Waiting / 0 Succeeded / 0 Failed
@@ -24,7 +26,7 @@ Pod Template:
   Labels:           app.kubernetes.io/instance=monitoring-kube-prometheus-prometheus
                     app.kubernetes.io/managed-by=prometheus-operator
                     app.kubernetes.io/name=prometheus
-                    app.kubernetes.io/version=2.53.0
+                    app.kubernetes.io/version=3.14.0-distroless
                     operator.prometheus.io/name=monitoring-kube-prometheus-prometheus
                     operator.prometheus.io/shard=0
                     prometheus=monitoring-kube-prometheus-prometheus
@@ -32,9 +34,9 @@ Pod Template:
   Service Account:  monitoring-kube-prometheus-prometheus
   Init Containers:
    init-config-reloader:
-    Image:      quay.io/prometheus-operator/prometheus-config-reloader:v0.75.0
-    Port:       8081/TCP
-    Host Port:  0/TCP
+    Image:      quay.io/prometheus-operator/prometheus-config-reloader:v0.94.1
+    Port:       8081/TCP (reloader-init)
+    Host Port:  0/TCP (reloader-init)
     Command:
       /bin/prometheus-config-reloader
     Args:
@@ -43,6 +45,9 @@ Pod Template:
       --config-file=/etc/prometheus/config/prometheus.yaml.gz
       --config-envsubst-file=/etc/prometheus/config_out/prometheus.env.yaml
       --watched-dir=/etc/prometheus/rules/prometheus-monitoring-kube-prometheus-prometheus-rulefiles-0
+      --watched-dir=/etc/prometheus/rules/prometheus-monitoring-kube-prometheus-prometheus-rulefiles-1
+      --watched-dir=/etc/prometheus/rules/prometheus-monitoring-kube-prometheus-prometheus-rulefiles-2
+      --watched-dir=/etc/prometheus/config
     Environment:
       POD_NAME:   (v1:metadata.name)
       SHARD:     0
@@ -50,19 +55,18 @@ Pod Template:
       /etc/prometheus/config from config (rw)
       /etc/prometheus/config_out from config-out (rw)
       /etc/prometheus/rules/prometheus-monitoring-kube-prometheus-prometheus-rulefiles-0 from prometheus-monitoring-kube-prometheus-prometheus-rulefiles-0 (rw)
+      /etc/prometheus/rules/prometheus-monitoring-kube-prometheus-prometheus-rulefiles-1 from prometheus-monitoring-kube-prometheus-prometheus-rulefiles-1 (rw)
+      /etc/prometheus/rules/prometheus-monitoring-kube-prometheus-prometheus-rulefiles-2 from prometheus-monitoring-kube-prometheus-prometheus-rulefiles-2 (rw)
   Containers:
    prometheus:
-    Image:      quay.io/prometheus/prometheus:v2.53.0
-    Port:       9090/TCP
-    Host Port:  0/TCP
+    Image:      quay.io/prometheus/prometheus:v3.14.0-distroless
+    Port:       9090/TCP (http-web)
+    Host Port:  0/TCP (http-web)
     Args:
-      --web.console.templates=/etc/prometheus/consoles
-      --web.console.libraries=/etc/prometheus/console_libraries
       --config.file=/etc/prometheus/config_out/prometheus.env.yaml
       --web.enable-lifecycle
       --web.external-url=http://monitoring-kube-prometheus-prometheus.monitoring:9090
       --web.route-prefix=/
-      --storage.tsdb.retention.time=10d
       --storage.tsdb.path=/prometheus
       --storage.tsdb.wal-compression
       --web.config.file=/etc/prometheus/web_config/web-config.yaml
@@ -73,13 +77,15 @@ Pod Template:
     Mounts:
       /etc/prometheus/certs from tls-assets (ro)
       /etc/prometheus/config_out from config-out (ro)
-      /etc/prometheus/rules/prometheus-monitoring-kube-prometheus-prometheus-rulefiles-0 from prometheus-monitoring-kube-prometheus-prometheus-rulefiles-0 (rw)
+      /etc/prometheus/rules/prometheus-monitoring-kube-prometheus-prometheus-rulefiles-0 from prometheus-monitoring-kube-prometheus-prometheus-rulefiles-0 (ro)
+      /etc/prometheus/rules/prometheus-monitoring-kube-prometheus-prometheus-rulefiles-1 from prometheus-monitoring-kube-prometheus-prometheus-rulefiles-1 (ro)
+      /etc/prometheus/rules/prometheus-monitoring-kube-prometheus-prometheus-rulefiles-2 from prometheus-monitoring-kube-prometheus-prometheus-rulefiles-2 (ro)
       /etc/prometheus/web_config/web-config.yaml from web-config (ro,path="web-config.yaml")
       /prometheus from prometheus-monitoring-kube-prometheus-prometheus-db (rw)
    config-reloader:
-    Image:      quay.io/prometheus-operator/prometheus-config-reloader:v0.75.0
-    Port:       8080/TCP
-    Host Port:  0/TCP
+    Image:      quay.io/prometheus-operator/prometheus-config-reloader:v0.94.1
+    Port:       8080/TCP (reloader-web)
+    Host Port:  0/TCP (reloader-web)
     Command:
       /bin/prometheus-config-reloader
     Args:
@@ -88,6 +94,9 @@ Pod Template:
       --config-file=/etc/prometheus/config/prometheus.yaml.gz
       --config-envsubst-file=/etc/prometheus/config_out/prometheus.env.yaml
       --watched-dir=/etc/prometheus/rules/prometheus-monitoring-kube-prometheus-prometheus-rulefiles-0
+      --watched-dir=/etc/prometheus/rules/prometheus-monitoring-kube-prometheus-prometheus-rulefiles-1
+      --watched-dir=/etc/prometheus/rules/prometheus-monitoring-kube-prometheus-prometheus-rulefiles-2
+      --watched-dir=/etc/prometheus/config
     Environment:
       POD_NAME:   (v1:metadata.name)
       SHARD:     0
@@ -95,15 +104,17 @@ Pod Template:
       /etc/prometheus/config from config (rw)
       /etc/prometheus/config_out from config-out (rw)
       /etc/prometheus/rules/prometheus-monitoring-kube-prometheus-prometheus-rulefiles-0 from prometheus-monitoring-kube-prometheus-prometheus-rulefiles-0 (rw)
+      /etc/prometheus/rules/prometheus-monitoring-kube-prometheus-prometheus-rulefiles-1 from prometheus-monitoring-kube-prometheus-prometheus-rulefiles-1 (rw)
+      /etc/prometheus/rules/prometheus-monitoring-kube-prometheus-prometheus-rulefiles-2 from prometheus-monitoring-kube-prometheus-prometheus-rulefiles-2 (rw)
   Volumes:
    config:
     Type:        Secret (a volume populated by a Secret)
     SecretName:  prometheus-monitoring-kube-prometheus-prometheus
     Optional:    false
    tls-assets:
-    Type:                Projected (a volume that contains injected data from multiple sources)
-    SecretName:          prometheus-monitoring-kube-prometheus-prometheus-tls-assets-0
-    SecretOptionalName:  <nil>
+    Type:        Projected (a volume that contains injected data from multiple sources)
+    SecretName:  prometheus-monitoring-kube-prometheus-prometheus-tls-assets-0
+    Optional:    false
    config-out:
     Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
     Medium:     Memory
@@ -111,17 +122,27 @@ Pod Template:
    prometheus-monitoring-kube-prometheus-prometheus-rulefiles-0:
     Type:      ConfigMap (a volume populated by a ConfigMap)
     Name:      prometheus-monitoring-kube-prometheus-prometheus-rulefiles-0
-    Optional:  false
+    Optional:  true
+   prometheus-monitoring-kube-prometheus-prometheus-rulefiles-1:
+    Type:      ConfigMap (a volume populated by a ConfigMap)
+    Name:      prometheus-monitoring-kube-prometheus-prometheus-rulefiles-1
+    Optional:  true
+   prometheus-monitoring-kube-prometheus-prometheus-rulefiles-2:
+    Type:      ConfigMap (a volume populated by a ConfigMap)
+    Name:      prometheus-monitoring-kube-prometheus-prometheus-rulefiles-2
+    Optional:  true
    web-config:
     Type:        Secret (a volume populated by a Secret)
     SecretName:  prometheus-monitoring-kube-prometheus-prometheus-web-config
     Optional:    false
    prometheus-monitoring-kube-prometheus-prometheus-db:
-    Type:       EmptyDir (a temporary directory that shares a pod's lifetime)
-    Medium:     
-    SizeLimit:  <unset>
-Volume Claims:  <none>
+    Type:          EmptyDir (a temporary directory that shares a pod's lifetime)
+    Medium:        
+    SizeLimit:     <unset>
+  Node-Selectors:  <none>
+  Tolerations:     <none>
+Volume Claims:     <none>
 Events:
   Type    Reason            Age   From                    Message
   ----    ------            ----  ----                    -------
-  Normal  SuccessfulCreate  17m   statefulset-controller  create Pod prometheus-monitoring-kube-prometheus-prometheus-0 in StatefulSet prometheus-monitoring-kube-prometheus-prometheus successful
+  Normal  SuccessfulCreate  43m   statefulset-controller  create Pod prometheus-monitoring-kube-prometheus-prometheus-0 in StatefulSet prometheus-monitoring-kube-prometheus-prometheus successful
