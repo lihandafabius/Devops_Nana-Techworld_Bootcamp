@@ -86,7 +86,7 @@ The playbook uses two plays:
       changed_when: false
 
     - name: Stop running application
-      shell: "kill {{ app_process.stdout }} || true"
+      shell: "kill {{ app_process.stdout }} || true" # '|| true' ensures Ansible doesn't fail if the app already stopped on
       when: app_process.rc == 0
       changed_when: app_process.rc == 0
 
@@ -108,7 +108,9 @@ The playbook uses two plays:
 ```
 Before deployment, Ansible ensures that the required Linux user and Java runtime exist. If an older instance of the application is running, the process is stopped and the previous JAR is removed before the new artifact is copied.
 
-> **Note:** `nohup` keeps the Java process running after Ansible's SSH session ends. Without it, the process could be terminated when the remote session closes. The `&` runs the application in the background, while the output is redirected to `app.log` located in the specified firstname directory.
+> **Note:** `nohup` keeps the Java process running after Ansible's SSH session ends. Without it, the process would terminate when the remote session closes. The `&` runs the application in the background, while the output is redirected to `app.log` located in the specified user's home directory.
+>
+> **Note on `acl` package:** The `acl` (Access Control List) package is required so Ansible can safely switch to run commands as the newly created application user (`become_user: "{{ firstname }}"`). Without it, Linux blocks the non-admin user from reading Ansible's temporary setup files, causing permission errors.
 
 </details>
 
