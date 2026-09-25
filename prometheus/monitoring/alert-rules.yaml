@@ -6,4 +6,5 @@ labels:
   namespace: monitoring
 annotations:
   description: "CPU load on host is over 50%\n Value = {{ $value }}\n Instance = {{ $labels.instance }}\n"
+  # runbook_url: "https://wiki.yourdomain.com/runbooks/host-high-cpu-load"
   summary: "Host CPU load high"
