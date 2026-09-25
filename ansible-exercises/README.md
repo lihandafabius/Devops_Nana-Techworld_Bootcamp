@@ -2,30 +2,28 @@
 
 Manual infrastructure work doesn't scale well — the same steps repeated across servers eventually drift apart, break under time pressure, or end up understood by only one person. Ansible solves this by letting infrastructure be defined once, as code: it's agentless (driving everything over plain SSH, no software required on target machines) and idempotent (running the same playbook twice produces the same safe result, not double the side effects), which means a deployment process can be version-controlled, reviewed, and handed to anyone to run with confidence.
 
-This project walks through eight exercises that build on each other — starting with a single-command Java artifact deployment, moving through multi-server AWS provisioning with private networking, and finishing with a Kubernetes-based deployment pipeline — each one turning a manual process into something repeatable and automated end to end.
+This directory walks through eight projects that build on each other — starting with a single-command Java artifact deployment, moving through multi-server AWS provisioning with private networking, and finishing with a Kubernetes-based deployment pipeline — each one turning a manual process into something repeatable and automated end to end.
+
 
 ## Project Objectives
 
-Across the eight exercises, the following concepts and tools are covered:
+Across the projects, these were my main objectives to take after building the projects:
 
-- Building a Gradle/Spring Boot application and deploying its jar artifact to a remote server via Ansible
-- Idempotent stop/replace/start logic for redeploying an already-running application
-- Publishing versioned build artifacts to a Nexus repository
-- Dynamically provisioning EC2 instances (security groups, key pairs, AMI lookups) with `amazon.aws` Ansible modules
-- Installing and running Jenkins three different ways: bare EC2, cross-OS (Ubuntu/Amazon Linux) support via conditionals, and as a Docker container
-- Designing multi-play, multi-host Ansible runs that chain provisioning → configuration → application deployment in one command
-- Building private-subnet AWS networking (VPC, NAT Gateway, route tables) so a database server has outbound internet but no public exposure
-- Using a "jump" control server to configure hosts that are otherwise unreachable from a local machine
-- Installing MySQL via an existing, community-maintained Ansible role instead of writing the logic from scratch
-- Writing raw Kubernetes manifests (Deployments, Services, Secrets, PersistentVolumeClaims, StorageClasses) for a stateful MySQL workload
-- Provisioning an EKS cluster via Terraform, including IAM/Pod Identity wiring for the EBS CSI driver
-- Migrating a single-replica MySQL Deployment to a highly-available, Helm-deployed StatefulSet
-- Applying every Kubernetes change through Ansible's `kubernetes.core.k8s` module, so the end user never has to run `kubectl` directly
+- Build repeatable, version-controlled infrastructure workflows that reduce manual configuration and make deployments easier to reproduce and maintain.
+- Reduce deployment risk and configuration drift by replacing manual, error-prone infrastructure processes with consistent automated workflows.
+- Understand and apply **Ansible configuration management and automation best practices**, including reusable and idempotent playbooks.
+- Automate **application deployment, server configuration, and artifact management** across different environments.
+- Configure and manage **Ansible control nodes** while handling **OS and distribution differences** using conditionals, variables, and task inclusion.
+- Integrate Ansible with **AWS infrastructure**, including EC2 provisioning, networking, private subnets, and multi-server architectures.
+- Automate **Docker and Kubernetes deployments**, including containerized applications, persistent storage, Services, ConfigMaps, Secrets, Ingress, and Helm.
+- Develop practical **troubleshooting and infrastructure automation skills** across Linux, AWS, Ansible, Docker, and Kubernetes.
+
+
 
 ---
 
 <details>
-<summary>Exercise 1: Build & Deploy Java Artifact</summary>
+<summary> Project 1: Build & Deploy Java Artifact</summary>
 
 <br />
 
