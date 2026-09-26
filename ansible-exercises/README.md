@@ -209,18 +209,18 @@ Credentials are collected interactively via `vars_prompt` rather than hardcoded,
 ---
 
 <details>
-<summary> Project 3: Dynamically Provision Jenkins on EC2 or Ubuntu (as a Docker Container)</summary>
+<summary> Project 3: Dynamically Provision Jenkins on EC2 or Ubuntu </summary>
 
 <br />
 
-Up to this point Jenkins servers had to be created and configured by hand whenever the team needed one. The goal here was to remove that bottleneck entirely: a single Ansible command should be able to spin up a brand-new server and come back with a fully working Jenkins instance, ready for builds. Since the company also runs infrastructure outside AWS, the same playbook needed to support installing onto an existing Ubuntu server as well as provisioning a fresh EC2 instance — one codebase, two OS flavors, selected at runtime. Jenkins itself is run as a Docker container here rather than installed as a native package, since the same container image works identically across both OS flavors and avoids managing a separate Jenkins repo/key per distribution — see the note below on why Docker was chosen over a native install.
+Up to this point Jenkins servers had to be created and configured by hand whenever the team needed one. The goal here was to remove that bottleneck entirely: a single Ansible command should be able to spin up a brand-new server and come back with a fully working Jenkins instance, ready for builds. Since the company also runs infrastructure outside AWS, the same playbook needed to support installing onto an existing Ubuntu server as well as provisioning a fresh EC2 instance — one codebase, two OS flavors, selected at runtime. Jenkins itself is run as a Docker container here rather than installed as a native package, since the same container image works identically across both OS flavors and avoids managing a separate Jenkins repo/key per distribution among many other reasons.
 
 ### Implementation
 
 The playbook is split into two plays:
 
-- **Provision:** First play. Runs locally, asks which OS to target, provisions the EC2 instance and its security group (only for the EC2 path), and dynamically adds the new host to the in-memory inventory.
-- **Configure:** Second play. Connects to whichever host resulted from the first play, installs Docker, Node.js and npm (branching between `apt` and `dnf` depending on `os_type`), then starts Jenkins as a Docker container.
+- **Provision:** First play. Runs locally, asks which OS to target, provisions the EC2 instance and its security group, and dynamically adds the new host to the in-memory inventory.
+- **Configure:** Second play. Connects to whichever host resulted from the first play, installs Docker (branching between `apt` and `dnf` depending on `os_type`), then starts Jenkins as a Docker container. 
 
 ```yaml
 ---
@@ -336,12 +336,14 @@ The playbook is split into two plays:
         cache_valid_time: 3600
       when: os_type == "ubuntu"
 
-    - name: Install Docker, Node.js and npm on Ubuntu
+    # Using the Ubuntu-maintained docker.io package for simplicity.
+    # Production setups should instead add Docker's official apt repo
+    # (docs.docker.com/engine/install/ubuntu) for the latest version and security patches.
+
+    - name: Install Docker on Ubuntu
       apt:
         name:
-          - docker.io
-          - nodejs
-          - npm
+          - docker.io 
         state: present
       when: os_type == "ubuntu"
 
@@ -353,12 +355,10 @@ The playbook is split into two plays:
         update_only: true
       when: os_type == "amazon_linux"
 
-    - name: Install Docker, Node.js and npm on Amazon Linux
+    - name: Install Docker on Amazon Linux
       dnf:
         name:
           - docker
-          - nodejs
-          - npm
         state: present
       when: os_type == "amazon_linux"
 
@@ -409,10 +409,10 @@ The playbook is split into two plays:
 > **Notes:**
 > - **Security group scoping:** Rather than opening SSH and the Jenkins web UI to `0.0.0.0/0`, the play calls the `api.ipify.org` service to get the operator's current public IP and locks both the SSH (22) and Jenkins (8080) rules to that single `/32` address. This avoids exposing a fresh, not-yet-hardened Jenkins instance to the whole internet during setup.
 > - **`add_host` and dynamic inventory:** Since the target host doesn't exist until the first play creates it, `add_host` registers the new instance's public IP into an in-memory `jenkins` group on the fly — along with the correct SSH user and `os_type` fact — so the second play can immediately target it without a separate inventory file.
-> - **OS branching:** Only the Docker/Node.js/npm installation step differs between OS flavors (`apt` on Ubuntu, `dnf` on Amazon Linux). Starting Docker, running the Jenkins container, and everything after is common to both, since it's the same `jenkins/jenkins:lts` image either way.
-> - **Docker over a native package install:** Installing Jenkins as a container sidesteps maintaining a separate Jenkins apt repo/key for Ubuntu and a separate RPM repo/key for Amazon Linux — the same `jenkins/jenkins:lts` image is pulled and run identically regardless of the underlying OS. The `jenkins_home` named volume persists Jenkins' data independently of the container's own lifecycle.
-> - **Docker-in-Docker via bind mounts:** For Jenkins to run Docker builds itself, the container needs access to the host's Docker engine rather than running its own nested daemon. Mounting `/var/run/docker.sock` gives it that access, and mounting the host's `docker` CLI binary (its path resolved dynamically via `which docker` rather than hardcoded, since it differs between a package install and a manual one) gives it the command to use it with.
-> - **Docker socket permission:** The container's Jenkins process runs under the image's own built-in user, which has no relationship to any user or group on the host — so host-side group membership (e.g. adding a host `jenkins` user to the host's `docker` group) has no effect on it. Setting the socket to `0666` is the simplest way to grant it access; a small project reasonably accepts that any local process can also reach the socket, whereas a larger, more security-conscious setup would instead match the container's group ID to the host's `docker` group GID explicitly.
+
+- Only the Docker install step differs between OS flavors (`apt` vs `dnf`); starting Docker and running the Jenkins container is common to both.
+- Mounting `/var/run/docker.sock` and the host's `docker` binary (path resolved dynamically via `which docker`) lets Jenkins run Docker builds against the host's engine instead of nesting its own daemon.
+- The container's Jenkins user has no relation to any host user/group, so host-side group membership doesn't apply. `0666` on the socket is the simple fix; a stricter setup would match the container's group ID to the host's `docker` GID instead.
 
 ![Choose OS](images/os.png)
 
