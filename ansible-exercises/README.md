@@ -421,9 +421,9 @@ The playbook is split into two plays:
 ![Jenkins login page](images/jenkins_login.png)
 
 </details>
+
 ---
 
-<details>
 <summary>Exercise 5: Install Jenkins as a Docker Container</summary>
 
 <br />
