@@ -425,92 +425,618 @@ The playbook is split into two plays:
 ---
 
 <details>
-<summary>Exercise 6: Web Server and Database Server Configuration</summary>
+<summary> Project 4: Web Server and Database Server Configuration</summary>
 
 <br />
 
-A second team needed a traditional (non-Docker) two-tier setup: a Java web server and a MySQL database server, both provisioned inside the same VPC. Critically, the database server was required to have **no public IP at all** — reachable only from inside the VPC — which meant it also needed a dedicated Ansible control server to actually configure it, since a laptop outside the VPC has no route to a private IP.
+Another team wanted a traditional, non-containerized setup: a Java web application talking to a MySQL database, both on AWS, provisioned and configured entirely through Ansible. The agreed architecture was a dedicated Ansible control-plane server, alongside a web server and a database server sharing the same VPC — with the database left deliberately unreachable from outside the VPC by giving it no public IP address at all.
 
-### Private Networking
+Since the database server has no direct internet access, package installation for it still needs an outbound path, so its subnet routes through a NAT gateway rather than an Internet Gateway. And since the database's private IP can't be reached from outside the VPC in the first place, the two servers can't be configured directly from a local machine — that work has to run *from* the Ansible control server, once it's inside the VPC.
 
-A public and a private subnet were provisioned, along with an Internet Gateway (for the public subnet) and a NAT Gateway (so the private subnet gets outbound internet — needed to `apt install mysql` — without any inbound exposure):
+### Architecture
 
-```yaml
-- name: Create NAT Gateway (lives in the public subnet, gives the private subnet outbound internet)
-  amazon.aws.ec2_vpc_nat_gateway:
-    subnet_id: "{{ public_subnet_id }}"
-    allocation_id: "{{ nat_eip_id }}"
-    wait: true
+![Architecture](images/simple_architecture.png)
 
-- name: Create private route table (routes to the internet via NAT gateway)
-  amazon.aws.ec2_vpc_route_table:
-    subnets: ["{{ private_subnet_id }}"]
-    routes:
-      - dest: "0.0.0.0/0"
-        nat_gateway_id: "{{ nat_gw_result.nat_gateway_id }}"
-```
+### Implementation
 
-### Security Group Layering
+The project is split across four playbooks, run in order:
 
-Three security groups formed a chain of trust rather than three independent rule sets: the control server accepted SSH only from the operator's IP; the web server accepted SSH only *from the control server's security group* (not the operator directly); the database server accepted MySQL traffic only from the web server's security group, and SSH only from the control server's — with no rule referencing the operator's IP or `0.0.0.0/0` at all.
+#### 1. Provision networking
 
-### Configuring the Control Server, Then Running From It
-
-A dedicated playbook installs Ansible and its dependencies on the control server, copies the SSH private key onto it (so it can, in turn, reach the web/db servers over the private subnet), stages a generated `inventory.ini` (pointing at the web/db servers' **private** IPs), and copies over the actual deployment playbook:
+Creates the VPC, both subnets, the Internet Gateway, the NAT Gateway (with its own Elastic IP), and the public/private route tables.
 
 ```yaml
-- name: Copy SSH private key to control server
-  copy:
-    src: "{{ ssh_key }}"
-    dest: "/home/{{ ssh_user }}/.ssh/{{ ssh_key | basename }}"
-    mode: "0600"
+---
+- name: Provision networking infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: false
 
-- name: Run deploy_app_server_and_db.yaml on the control server
-  command:
-    cmd: >
-      ansible-playbook -i inventory.ini deploy_app_server_and_db.yaml
-      --extra-vars "web_public_ip={{ hostvars['localhost'].web_server_public_ip }}"
-    chdir: "{{ project_dir }}"
+  vars:
+    aws_region: "eu-north-1"
+    availability_zone: "eu-north-1a"
+
+    vpc_cidr: "10.0.0.0/16"
+    public_subnet_cidr: "10.0.1.0/24"
+    private_subnet_cidr: "10.0.2.0/24"
+
+    vpc_name: "Java-gradle-app-vpc"
+    public_subnet_name: "Java-gradle-app-public-subnet"
+    private_subnet_name: "Java-gradle-app-private-subnet"
+    igw_name: "Java-gradle-app-igw"
+    public_route_table_name: "Java-gradle-app-public-rt"
+    private_route_table_name: "Java-gradle-app-private-rt"
+    nat_gateway_name: "Java-gradle-app-nat"
+
+  tasks:
+
+    - name: Create VPC
+      amazon.aws.ec2_vpc_net:
+        name: "{{ vpc_name }}"
+        cidr_block: "{{ vpc_cidr }}"
+        region: "{{ aws_region }}"
+        state: present
+        tags:
+          Name: "{{ vpc_name }}"
+      register: vpc
+
+    - name: Create public subnet
+      amazon.aws.ec2_vpc_subnet:
+        vpc_id: "{{ vpc.vpc.id }}"
+        cidr: "{{ public_subnet_cidr }}"
+        az: "{{ availability_zone }}"
+        region: "{{ aws_region }}"
+        map_public: true
+        state: present
+        tags:
+          Name: "{{ public_subnet_name }}"
+      register: public_subnet
+
+    - name: Create private subnet
+      amazon.aws.ec2_vpc_subnet:
+        vpc_id: "{{ vpc.vpc.id }}"
+        cidr: "{{ private_subnet_cidr }}"
+        az: "{{ availability_zone }}"
+        region: "{{ aws_region }}"
+        map_public: false
+        state: present
+        tags:
+          Name: "{{ private_subnet_name }}"
+      register: private_subnet
+
+    - name: Create Internet Gateway
+      amazon.aws.ec2_vpc_igw:
+        vpc_id: "{{ vpc.vpc.id }}"
+        region: "{{ aws_region }}"
+        state: present
+        tags:
+          Name: "{{ igw_name }}"
+      register: igw
+
+    - name: Create public route table
+      amazon.aws.ec2_vpc_route_table:
+        vpc_id: "{{ vpc.vpc.id }}"
+        region: "{{ aws_region }}"
+        tags:
+          Name: "{{ public_route_table_name }}"
+        subnets:
+          - "{{ public_subnet.subnet.id }}"
+        routes:
+          - dest: "0.0.0.0/0"
+            gateway_id: "{{ igw.gateway_id }}"
+        state: present
+
+    - name: Allocate Elastic IP for NAT Gateway
+      amazon.aws.ec2_eip:
+        region: "{{ aws_region }}"
+        in_vpc: true
+        state: present
+      register: nat_eip
+
+    - name: Create NAT Gateway
+      amazon.aws.ec2_vpc_nat_gateway:
+        subnet_id: "{{ public_subnet.subnet.id }}"
+        allocation_id: "{{ nat_eip.allocation_id }}"
+        region: "{{ aws_region }}"
+        state: present
+        wait: true
+        tags:
+          Name: "{{ nat_gateway_name }}"
+      register: nat_gateway
+
+    - name: Create private route table
+      amazon.aws.ec2_vpc_route_table:
+        vpc_id: "{{ vpc.vpc.id }}"
+        region: "{{ aws_region }}"
+        tags:
+          Name: "{{ private_route_table_name }}"
+        subnets:
+          - "{{ private_subnet.subnet.id }}"
+        routes:
+          - dest: "0.0.0.0/0"
+            nat_gateway_id: "{{ nat_gateway.nat_gateway_id }}"
+        state: present
+
+    - name: Display networking information
+      debug:
+        msg:
+          - "VPC ID: {{ vpc.vpc.id }}"
+          - "Public subnet ID: {{ public_subnet.subnet.id }}"
+          - "Private subnet ID: {{ private_subnet.subnet.id }}"
 ```
 
-### Installing MySQL via an Existing Role
+- In a real environment this networking layer would typically already exist, managed separately (e.g. by a networking/platform team or via Terraform) — it's included here to make the exercise fully self-contained.
+- The private route table points `0.0.0.0/0` at the NAT Gateway rather than the Internet Gateway, giving the database server outbound-only access — enough to install packages, but nothing can initiate a connection *into* it from the internet.
 
-Rather than writing MySQL install/configuration logic from scratch, the widely-used `geerlingguy.mysql` community role was used, configured entirely via variables:
+#### 2. Provision the three servers
+
+Looks up the VPC/subnets created above, creates three chained security groups, then launches the control-plane, web, and database instances — the database instance alone gets `assign_public_ip: false`.
 
 ```yaml
-vars:
-  mysql_root_password: "{{ db_root_password }}"
-  mysql_bind_address: "0.0.0.0"   # role defaults to 127.0.0.1 - must open this for the web server to connect remotely
-  mysql_databases:
-    - name: appdb
-  mysql_users:
-    - name: appuser
-      password: "{{ db_password }}"
-      priv: "appdb.*:ALL"
-      host: "%"   # access control enforced at the security-group level instead
+---
+- name: Provision Ansible, Web and Database servers
+  hosts: localhost
+  connection: local
+  gather_facts: false
 
-roles:
-  - geerlingguy.mysql
+  vars:
+    aws_region: "eu-north-1"
+    availability_zone: "eu-north-1a"
+    vpc_name: "Java-gradle-app-vpc"
+    public_subnet_name: "Java-gradle-app-public-subnet"
+    private_subnet_name: "Java-gradle-app-private-subnet"
+
+    instance_type: "t3.small"
+    key_name: "myapp-key-pair"
+    ami_id: "ami-0aba19e56f3eaec05"
+    key_file: "~/.ssh/myapp-key-pair.pem"
+
+  tasks:
+
+    - name: Get VPC information
+      amazon.aws.ec2_vpc_net_info:
+        region: "{{ aws_region }}"
+        filters:
+          "tag:Name": "{{ vpc_name }}"
+      register: vpc_info
+
+    - name: Get public subnet information
+      amazon.aws.ec2_vpc_subnet_info:
+        region: "{{ aws_region }}"
+        filters:
+          "tag:Name": "{{ public_subnet_name }}"
+      register: public_subnet_info
+
+    - name: Get private subnet information
+      amazon.aws.ec2_vpc_subnet_info:
+        region: "{{ aws_region }}"
+        filters:
+          "tag:Name": "{{ private_subnet_name }}"
+      register: private_subnet_info
+
+    - name: Set network IDs
+      set_fact:
+        vpc_id: "{{ vpc_info.vpcs[0].vpc_id }}"
+        public_subnet_id: "{{ public_subnet_info.subnets[0].id }}"
+        private_subnet_id: "{{ private_subnet_info.subnets[0].id }}"
+
+    - name: Get my current public IP
+      uri:
+        url: https://api.ipify.org
+        return_content: true
+      register: my_ip
+
+    - name: Create Ansible security group
+      amazon.aws.ec2_security_group:
+        name: "control-node-sg"
+        description: "Security group for Ansible control plane"
+        vpc_id: "{{ vpc_id }}"
+        region: "{{ aws_region }}"
+        rules:
+          - proto: tcp
+            ports: [22]
+            cidr_ip: "{{ my_ip.content }}/32"
+            rule_desc: "SSH from my IP"
+      register: control_node_sg
+
+    - name: Create Web security group
+      amazon.aws.ec2_security_group:
+        name: "app-server-sg"
+        description: "Security group for Java web server"
+        vpc_id: "{{ vpc_id }}"
+        region: "{{ aws_region }}"
+        rules:
+          - proto: tcp
+            ports: [22]
+            group_id: "{{ control_node_sg.group_id }}"
+            rule_desc: "SSH from Ansible server"
+          - proto: tcp
+            ports: [8080]
+            cidr_ip: "{{ my_ip.content }}/32"
+            rule_desc: "Java application from my IP"
+      register: web_server_sg
+
+    - name: Create Database security group
+      amazon.aws.ec2_security_group:
+        name: "db-server-sg"
+        description: "Security group for MySQL database"
+        vpc_id: "{{ vpc_id }}"
+        region: "{{ aws_region }}"
+        rules:
+          - proto: tcp
+            ports: [22]
+            group_id: "{{ control_node_sg.group_id }}"
+            rule_desc: "SSH from Ansible server"
+          - proto: tcp
+            ports: [3306]
+            group_id: "{{ web_server_sg.group_id }}"
+            rule_desc: "MySQL from Web server"
+      register: db_server_sg
+
+    - name: Provision Ansible control plane
+      amazon.aws.ec2_instance:
+        name: "Java-gradle-app-ansible-server"
+        key_name: "{{ key_name }}"
+        instance_type: "{{ instance_type }}"
+        image_id: "{{ ami_id }}"
+        region: "{{ aws_region }}"
+        vpc_subnet_id: "{{ public_subnet_id }}"
+        security_groups: ["{{ control_node_sg.group_id }}"]
+        network_interfaces:
+          - assign_public_ip: true
+        wait: true
+        state: running
+        tags:
+          Name: "Java-gradle-app-ansible-server"
+          Role: "ansible-control-plane"
+      register: ansible_server
+
+    - name: Provision Web server
+      amazon.aws.ec2_instance:
+        name: "Java-gradle-app-web-server"
+        key_name: "{{ key_name }}"
+        instance_type: "{{ instance_type }}"
+        image_id: "{{ ami_id }}"
+        region: "{{ aws_region }}"
+        vpc_subnet_id: "{{ public_subnet_id }}"
+        security_groups: ["{{ web_server_sg.group_id }}"]
+        network_interfaces:
+          - assign_public_ip: true
+        wait: true
+        state: running
+        tags:
+          Name: "Java-gradle-app-web-server"
+          Role: "web-server"
+      register: web_server
+
+    - name: Provision Database server
+      amazon.aws.ec2_instance:
+        name: "Java-gradle-app-db-server"
+        key_name: "{{ key_name }}"
+        instance_type: "{{ instance_type }}"
+        image_id: "{{ ami_id }}"
+        region: "{{ aws_region }}"
+        vpc_subnet_id: "{{ private_subnet_id }}"
+        security_groups: ["{{ db_server_sg.group_id }}"]
+        network_interfaces:
+          - assign_public_ip: false
+        wait: true
+        state: running
+        tags:
+          Name: "Java-gradle-app-db-server"
+          Role: "database-server"
+      register: db_server
+
+    - name: Display server information
+      debug:
+        msg:
+          - "Control node public IP: {{ ansible_server.instances[0].public_ip_address }}"
+          - "Web server public IP: {{ web_server.instances[0].public_ip_address }}"
+          - "Database server private IP: {{ db_server.instances[0].private_ip_address }}"
 ```
 
-Once MySQL was reachable, the web play deployed the Java jar and started it with database credentials injected as OS environment variables — matching exactly what the application's `DatabaseConfig.java` reads via `System.getenv()`:
+- Security groups reference each other by `group_id` rather than by CIDR, so access follows *identity* (which server you are) rather than *location* (which IP you're coming from) — the web server can reach the DB on 3306 regardless of its own IP, but nothing else can, even from inside the VPC.
+- `assign_public_ip: false` on the database instance is what actually keeps it unreachable from outside the VPC — the private subnet's routing alone wouldn't be enough if the instance also had a public IP.
+
+#### 3. Configure the Ansible control server
+
+Looks up all three running instances, then connects to the control server to install Python/Ansible, install the `geerlingguy.mysql` role from Galaxy, and stage everything the next playbook needs — the SSH private key, a generated `inventory.ini` targeting the web and DB servers by *private* IP, the built jar, and the deploy playbook itself. It finishes by running that deploy playbook from the control server.
 
 ```yaml
-- name: Start the application with DB connection details
-  become_user: "{{ app_user }}"
-  environment:
-    DB_USER: "{{ db_user }}"
-    DB_PWD: "{{ db_password }}"
-    DB_SERVER: "{{ db_host }}"
-    DB_NAME: "{{ db_name }}"
-  shell: >
-    nohup java -jar {{ remote_app_dir }}/{{ jar_name }}
-    > {{ remote_app_dir }}/app.log 2>&1 &
-  async: 1000
-  poll: 0
+---
+- name: Look up servers and prep the control server connection
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - project-vars
+
+  tasks:
+
+    - name: Get Ansible control server information
+      amazon.aws.ec2_instance_info:
+        region: "{{ aws_region }}"
+        filters:
+          "tag:Name": "{{ control_server_name }}"
+          instance-state-name: "running"
+      register: control_server
+
+    - name: Get web server information
+      amazon.aws.ec2_instance_info:
+        region: "{{ aws_region }}"
+        filters:
+          "tag:Name": "{{ web_server_name }}"
+          instance-state-name: "running"
+      register: web_server
+
+    - name: Get db server information
+      amazon.aws.ec2_instance_info:
+        region: "{{ aws_region }}"
+        filters:
+          "tag:Name": "{{ db_server_name }}"
+          instance-state-name: "running"
+      register: db_server
+
+    - name: Stop if any server was not found
+      fail:
+        msg: "One or more servers not found - run provision_servers.yaml first."
+      when: >
+        control_server.instances | length == 0 or
+        web_server.instances | length == 0 or
+        db_server.instances | length == 0
+
+    - name: Set server IPs
+      set_fact:
+        control_server_ip: "{{ control_server.instances[0].public_ip_address }}"
+        web_server_private_ip: "{{ web_server.instances[0].private_ip_address }}"
+        web_server_public_ip: "{{ web_server.instances[0].public_ip_address }}"
+        db_server_private_ip: "{{ db_server.instances[0].private_ip_address }}"
+
+    - name: Add control server to in-memory inventory
+      add_host:
+        name: "{{ control_server_ip }}"
+        groups: ansible_control
+        ansible_user: "{{ ssh_user }}"
+        ansible_ssh_private_key_file: "{{ ssh_key }}"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+
+    - name: Wait for SSH on the control server
+      wait_for:
+        host: "{{ control_server_ip }}"
+        port: 22
+        timeout: 300
+
+
+- name: Configure the control server and stage deployment files on it
+  hosts: ansible_control
+
+  vars_files:
+    - project-vars
+
+  tasks:
+
+    - name: Install Python and pip on control server
+      apt:
+        name: [python3, python3-pip, python3-venv, ansible]
+        state: present
+        update_cache: true
+      become: true
+
+    - name: Create project directory
+      ansible.builtin.file:
+        path: "{{ project_dir }}"
+        state: directory
+        owner: "{{ ssh_user }}"
+        group: "{{ ssh_user }}"
+        mode: "0755"
+      become: true
+
+    - name: Install MySQL role
+      ansible.builtin.command:
+        cmd: ansible-galaxy role install geerlingguy.mysql
+      changed_when: false
+
+    - name: Create SSH directory
+      ansible.builtin.file:
+        path: "/home/{{ ssh_user }}/.ssh"
+        state: directory
+        owner: "{{ ssh_user }}"
+        group: "{{ ssh_user }}"
+        mode: "0700"
+      become: true
+
+    - name: Copy SSH private key to control server
+      ansible.builtin.copy:
+        src: "{{ ssh_key }}"
+        dest: "/home/{{ ssh_user }}/.ssh/myapp-key-pair.pem"
+        owner: "{{ ssh_user }}"
+        group: "{{ ssh_user }}"
+        mode: "0600"
+      become: true
+
+    - name: Copy inventory.ini
+      ansible.builtin.copy:
+        dest: "{{ project_dir }}/inventory.ini"
+        content: |
+          [web]
+          {{ hostvars['localhost'].web_server_private_ip }} ansible_host={{ hostvars['localhost'].web_server_private_ip }} ansible_user={{ ssh_user }} ansible_ssh_private_key_file=~/.ssh/myapp-key-pair.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+
+          [db]
+          {{ hostvars['localhost'].db_server_private_ip }} ansible_host={{ hostvars['localhost'].db_server_private_ip }} ansible_user={{ ssh_user }} ansible_ssh_private_key_file=~/.ssh/myapp-key-pair.pem ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+        owner: "{{ ssh_user }}"
+        group: "{{ ssh_user }}"
+        mode: "0644"
+
+    - name: Copy jar file
+      ansible.builtin.copy:
+        src: "{{ local_jar_path }}"
+        dest: "{{ project_dir }}/build-tools-exercises-1.0-SNAPSHOT.jar"
+        owner: "{{ ssh_user }}"
+        group: "{{ ssh_user }}"
+        mode: "0644"
+
+    - name: Copy web and database deploy playbook
+      ansible.builtin.copy:
+        src: "{{ local_project_dir }}/deploy_app_server_and_db.yaml"
+        dest: "{{ project_dir }}/deploy_app_server_and_db.yaml"
+        owner: "{{ ssh_user }}"
+        group: "{{ ssh_user }}"
+        mode: "0644"
+
+    - name: Run deploy_app_server_and_db.yaml on the control server
+      ansible.builtin.command:
+        cmd: >
+          ansible-playbook -i inventory.ini deploy_app_server_and_db.yaml
+          --extra-vars "web_public_ip={{ hostvars['localhost'].web_server_public_ip }}"
+        chdir: "{{ project_dir }}"
+      register: deploy_result
+      changed_when: true
+
+    - debug:
+        var: deploy_result.stdout_lines
+
+    - debug:
+        msg: "App running at http://{{ hostvars['localhost'].web_server_public_ip }}:8080"
 ```
 
-Once both playbooks completed, the Java application was confirmed running and reachable from a browser at `http://<web-server-public-ip>:8080`, with all database traffic staying entirely inside the VPC.
+- This playbook is the one that actually reaches inside the VPC: it runs the deploy playbook *from* the control server, via a nested `ansible-playbook` invocation over `command`, because the local machine has no route to the database's private IP at all.
+- `inventory.ini` is generated dynamically with the servers' private IPs rather than committed as a static file — it's built from facts this playbook just looked up, so it stays correct across re-provisioning without manual editing.
+
+#### 4. Deploy MySQL and the Java application
+
+Runs from the control server. Installs MySQL on `db` using the existing `geerlingguy.mysql` role rather than hand-writing that logic, and deploys the Java app on `web`, pointed at the database's private IP via environment variables.
+
+```yaml
+---
+- name: Install and start MySQL on the database server
+  hosts: db
+  become: true
+
+  pre_tasks:
+    - name: Create MySQL native_password override file on the control server
+      copy:
+        dest: "/home/ubuntu/mysql-native-password-override.cnf"
+        content: |
+          [mysqld]
+          mysql_native_password=ON
+      delegate_to: localhost
+      become: false
+
+  vars:
+    mysql_root_password: "rootpass"
+    mysql_bind_address: "0.0.0.0"
+    mysql_config_include_files:
+      - src: "/home/ubuntu/mysql-native-password-override.cnf"
+    mysql_databases:
+      - name: appdb
+    mysql_users:
+      - name: appuser
+        password: "userpass"
+        priv: "appdb.*:ALL"
+        host: "%"
+
+  roles:
+    - geerlingguy.mysql
+
+- name: Deploy and run the Java web application
+  hosts: web
+  become: true
+
+  vars:
+    app_user: "appadmin"
+    remote_app_dir: "/opt/java-app"
+    jar_name: "build-tools-exercises-1.0-SNAPSHOT.jar"
+    local_jar_path: "/home/ubuntu/ansible-project/build-tools-exercises-1.0-SNAPSHOT.jar"
+    db_host: "{{ hostvars[groups['db'][0]]['ansible_host'] }}"
+    db_name: "appdb"
+    db_user: "appuser"
+    db_password: "userpass"
+    web_public_ip: "{{ ansible_host }}"
+
+  tasks:
+
+    - name: Create linux application user
+      user:
+        name: "{{ app_user }}"
+        state: present
+        create_home: true
+        groups: adm
+
+    - name: Update apt repo and cache
+      apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install Java
+      apt:
+        name: [openjdk-17-jre-headless, acl]
+        state: present
+
+    - name: Create application directory
+      file:
+        path: "{{ remote_app_dir }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0755"
+
+    - name: Check if application is running
+      shell: "pgrep -f 'java -jar {{ remote_app_dir }}/{{ jar_name }}'"
+      register: app_process
+      failed_when: false
+      changed_when: false
+
+    - name: Stop running application
+      shell: "kill {{ app_process.stdout }} || true"
+      when: app_process.rc == 0
+      changed_when: true
+
+    - name: Remove old jar file
+      file:
+        path: "{{ remote_app_dir }}/{{ jar_name }}"
+        state: absent
+
+    - name: Copy new jar artifact
+      copy:
+        src: "{{ local_jar_path }}"
+        dest: "{{ remote_app_dir }}/{{ jar_name }}"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0644"
+
+    - name: Start Java application
+      become_user: "{{ app_user }}"
+      environment:
+        DB_USER: "{{ db_user }}"
+        DB_PWD: "{{ db_password }}"
+        DB_SERVER: "{{ db_host }}"
+        DB_NAME: "{{ db_name }}"
+      shell: |
+        cd "{{ remote_app_dir }}"
+        nohup java -jar "{{ jar_name }}" > app.log 2>&1 &
+
+    - name: Check that application is running
+      shell: "pgrep -f 'java -jar {{ remote_app_dir }}/{{ jar_name }}'"
+      register: app_process
+      until: app_process.rc == 0
+      retries: 5
+      delay: 2
+      changed_when: false
+
+    - name: Check that port 8080 is listening
+      shell: "ss -lnt | grep ':8080 '"
+      register: port_check
+      until: port_check.rc == 0
+      retries: 10
+      delay: 2
+      changed_when: false
+```
+
+- Using an existing, maintained role (`geerlingguy.mysql`) instead of writing raw install/config tasks avoids re-solving problems the community has already handled — version quirks, config templating, and platform differences.
+- The `mysql_native_password=ON` override exists because newer MySQL defaults to `caching_sha2_password`, which the app's DB driver may not support — this keeps authentication compatible without changing the application.
+- `mysql_bind_address: "0.0.0.0"` is a deliberate deviation from the role's default (`127.0.0.1`, localhost-only) — required so the web server can reach MySQL at all, since it connects over the private network rather than from the same host.
+- Startup polling (`until`/`retries` on both the process check and the port check) replaces a fixed sleep, so the playbook only reports success once the app has actually finished starting and is genuinely listening — not just "the start command was issued."
 
 </details>
 
