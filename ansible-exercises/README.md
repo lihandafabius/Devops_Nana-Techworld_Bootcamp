@@ -424,6 +424,7 @@ The playbook is split into two plays:
 
 ---
 
+<details>
 <summary>Exercise 5: Install Jenkins as a Docker Container</summary>
 
 <br />
