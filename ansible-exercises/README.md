@@ -2,7 +2,7 @@
 
 Manual infrastructure work doesn't scale well, the same steps repeated across servers eventually drift apart, break under time pressure, or end up understood by only one person. Ansible solves this by letting infrastructure be defined once, as code: it's agentless (driving everything over plain SSH, no software required on target machines) and idempotent (running the same playbook twice produces the same safe result, not double the side effects), which means a deployment process can be version-controlled, reviewed, and handed to anyone to run with confidence.
 
-This directory walks through eight projects that build on each other starting with a single-command Java artifact deployment, moving through multi-server AWS provisioning with private networking, and finishing with a Kubernetes-based deployment pipeline each one turning a manual process into something repeatable and automated end to end.
+This directory walks through eight projects that build on each other — starting with a single-command Java artifact deployment, moving through multi-server AWS provisioning with private networking, and finishing with a Kubernetes-based deployment pipeline — each one turning a manual process into something repeatable and automated end to end. Each project is framed around a real team's requirements, presented the way they'd actually reach a DevOps engineer: a specific pain point or ask from developers, translated here into an Ansible playbook that solves it.
 
 
 ## Project Objectives
