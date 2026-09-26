@@ -1,90 +1,116 @@
 # 🤖 Automation with Ansible – Provisioning, Configuration and Kubernetes Deployment Pipelines
 
-Manual infrastructure work doesn't scale well — the same steps repeated across servers eventually drift apart, break under time pressure, or end up understood by only one person. Ansible solves this by letting infrastructure be defined once, as code: it's agentless (driving everything over plain SSH, no software required on target machines) and idempotent (running the same playbook twice produces the same safe result, not double the side effects), which means a deployment process can be version-controlled, reviewed, and handed to anyone to run with confidence.
+Manual infrastructure work doesn't scale well, the same steps repeated across servers eventually drift apart, break under time pressure, or end up understood by only one person. Ansible solves this by letting infrastructure be defined once, as code: it's agentless (driving everything over plain SSH, no software required on target machines) and idempotent (running the same playbook twice produces the same safe result, not double the side effects), which means a deployment process can be version-controlled, reviewed, and handed to anyone to run with confidence.
 
-This project walks through eight exercises that build on each other — starting with a single-command Java artifact deployment, moving through multi-server AWS provisioning with private networking, and finishing with a Kubernetes-based deployment pipeline — each one turning a manual process into something repeatable and automated end to end.
+This directory walks through eight projects that build on each other starting with a single-command Java artifact deployment, moving through multi-server AWS provisioning with private networking, and finishing with a Kubernetes-based deployment pipeline each one turning a manual process into something repeatable and automated end to end.
+
 
 ## Project Objectives
 
-Across the eight exercises, the following concepts and tools are covered:
+Across the projects, these were my main objectives to take after building the projects:
 
-- Building a Gradle/Spring Boot application and deploying its jar artifact to a remote server via Ansible
-- Idempotent stop/replace/start logic for redeploying an already-running application
-- Publishing versioned build artifacts to a Nexus repository
-- Dynamically provisioning EC2 instances (security groups, key pairs, AMI lookups) with `amazon.aws` Ansible modules
-- Installing and running Jenkins three different ways: bare EC2, cross-OS (Ubuntu/Amazon Linux) support via conditionals, and as a Docker container
-- Designing multi-play, multi-host Ansible runs that chain provisioning → configuration → application deployment in one command
-- Building private-subnet AWS networking (VPC, NAT Gateway, route tables) so a database server has outbound internet but no public exposure
-- Using a "jump" control server to configure hosts that are otherwise unreachable from a local machine
-- Installing MySQL via an existing, community-maintained Ansible role instead of writing the logic from scratch
-- Writing raw Kubernetes manifests (Deployments, Services, Secrets, PersistentVolumeClaims, StorageClasses) for a stateful MySQL workload
-- Provisioning an EKS cluster via Terraform, including IAM/Pod Identity wiring for the EBS CSI driver
-- Migrating a single-replica MySQL Deployment to a highly-available, Helm-deployed StatefulSet
-- Applying every Kubernetes change through Ansible's `kubernetes.core.k8s` module, so the end user never has to run `kubectl` directly
+- Build repeatable, version-controlled infrastructure workflows that reduce manual configuration and make deployments easier to reproduce and maintain.
+- Reduce deployment risk and configuration drift by replacing manual, error-prone infrastructure processes with consistent automated workflows.
+- Understand and apply **Ansible configuration management and automation best practices**, including reusable and idempotent playbooks.
+- Automate **application deployment, server configuration, and artifact management** across different environments.
+- Configure and manage **Ansible control nodes** while handling **OS and distribution differences** using conditionals, variables, and task inclusion.
+- Integrate Ansible with **AWS infrastructure**, including EC2 provisioning, networking, private subnets, and multi-server architectures.
+- Automate **Docker and Kubernetes deployments**, including containerized applications, persistent storage, Services, ConfigMaps, Secrets, Ingress, and Helm.
+- Develop practical **troubleshooting and infrastructure automation skills** across Linux, AWS, Ansible, Docker, and Kubernetes.
 
 ---
 
 <details>
-<summary>Exercise 1: Build & Deploy Java Artifact</summary>
+<summary> Project 1: Build & Deploy Java Artifact</summary>
 
 <br />
 
-The starting point was a Gradle/Spring Boot application that needed to be built locally and deployed to a remote Ubuntu server — all from one Ansible command, without the developer needing to know or care about SSH, systemd, or file paths on the target machine.
+The starting point was a Gradle/Spring Boot application that needed to be built locally and deployed to a remote Ubuntu server. The goal was to make the entire process repeatable through a single Ansible playbook, including creating the application user, installing Java, replacing an existing artifact, and starting the application.
 
-### Build Play
+### Implementation
 
-The first play runs entirely locally (`hosts: localhost`, `connection: local`) and simply invokes Gradle:
+The playbook uses two plays:
+
+- **Build:** First play. Runs entirely locally then simply builds the Java application locally using Gradle.
+- **Deploy:** Second play. Connects to the remote Ubuntu server, prepares the environment, replaces the existing JAR artifact, and starts the application under a specified Linux user.
 
 ```yaml
-- name: Build the Java application jar
+
+---
+- name: Build Java Gradle application jar
   hosts: localhost
   connection: local
+  gather_facts: false
+
   tasks:
-    - name: Run gradle build
+    - name: Build Gradle project
       command: ./gradlew clean build
       args:
-        chdir: "{{ playbook_dir }}"
+        chdir: /home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises
+
+
+- name: Deploy Java application
+  hosts: app_server
+  become: true
+
+  vars_prompt:
+    - name: firstname
+      prompt: "Enter your first name"
+      private: false
+
+  tasks:
+
+    - name: Create linux application user
+      user:
+        name: "{{ firstname }}"
+        state: present
+        create_home: true
+        groups: adm
+
+    - name: Update apt repo and cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install Java
+      apt:
+        name:
+          - openjdk-17-jre-headless
+          - acl
+        state: present
+
+    - name: Check if application is running
+      shell: pgrep -f "java -jar /home/ubuntu/app.jar"
+      register: app_process
+      failed_when: false
+      changed_when: false
+
+    - name: Stop running application
+      shell: "kill {{ app_process.stdout }} || true" # '|| true' ensures Ansible doesn't fail if the app already stopped on
+      when: app_process.rc == 0
+      changed_when: app_process.rc == 0
+
+    - name: Remove old jar file
+      file:
+        path: /home/ubuntu/app.jar
+        state: absent
+
+    - name: Copy new jar artifact
+      copy:
+        src: /home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises/build/libs/build-tools-exercises-1.0-SNAPSHOT.jar
+        dest: /home/ubuntu/app.jar
+        mode: "0644"
+
+    - name: Start Java application
+      shell: nohup java -jar /home/ubuntu/app.jar > /home/{{ firstname }}/app.log 2>&1 &
+      become_user: "{{ firstname }}"
+
 ```
+Before deployment, Ansible ensures that the required Linux user and Java runtime exist. If an older instance of the application is running, the process is stopped and the previous JAR is removed before the new artifact is copied.
 
-### Deploy Play
-
-The deploy play targets the remote server. The developer is prompted for their first name, which becomes the Linux user the application runs as — created automatically if it doesn't already exist:
-
-```yaml
-- name: Create linux user to run the application
-  user:
-    name: "{{ linux_user }}"
-    comment: "Java application admin"
-    system: true
-    create_home: false
-    shell: /usr/sbin/nologin
-```
-
-Since the application may already be running from a previous deployment, the playbook checks, stops, and waits for the old process to fully exit before copying in the new jar:
-
-```yaml
-- name: Check whether the application is currently running
-  shell: "pgrep -f {{ jar_name }} || true"
-  register: running_pid
-  changed_when: false
-
-- name: Stop the application if it's running
-  shell: "pkill -f {{ jar_name }}"
-  when: running_pid.stdout != ""
-  failed_when: false
-```
-
-The application is then started via `nohup` combined with Ansible's `async`/`poll: 0`, so the process survives after the SSH session ends and Ansible doesn't block waiting for a long-lived process to "finish":
-
-```yaml
-- name: Start the application
-  become_user: "{{ linux_user }}"
-  shell: "nohup java -jar {{ remote_jar_path }} > {{ remote_app_dir }}/app.log 2>&1 &"
-  async: 1000
-  poll: 0
-```
-
-A follow-up `pgrep` retry loop confirms the new process actually came up before the play reports success.
+> **Note:** `nohup` keeps the Java process running after Ansible's SSH session ends. Without it, the process would terminate when the remote session closes. The `&` runs the application in the background, while the output is redirected to `app.log` located in the specified user's home directory.
+>
+> **Note on `acl` package:** The `acl` (Access Control List) package is required so Ansible can safely switch to run commands as the newly created application user (`become_user: "{{ firstname }}"`). Without it, Linux blocks the non-admin user from reading Ansible's temporary setup files, causing permission errors.
 
 </details>
 
