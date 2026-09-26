@@ -116,7 +116,7 @@
         cache_valid_time: 3600
       when: os_type == "ubuntu"
 
-    - name: Install Docker, Node.js and npm on Ubuntu
+    - name: Install Docker on Ubuntu
       apt:
         name:
           - docker.io
@@ -134,7 +134,7 @@
         update_only: true
       when: os_type == "amazon_linux"
 
-    - name: Install Docker, Node.js and npm on Amazon Linux
+    - name: Install Docker on Amazon Linux
       dnf:
         name:
           - docker
