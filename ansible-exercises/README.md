@@ -126,23 +126,83 @@ Before deployment, Ansible ensures that the required Linux user and Java runtime
 ---
 
 <details>
-<summary>Exercise 2: Push Java Artifact to Nexus</summary>
+<summary> Project 2: Push Java Artifact to Nexus</summary>
 
 <br />
 
-Once a build passed manual testing, developers wanted a simple way to publish it to the team's Nexus repository without remembering `curl` syntax or repository URLs.
+Once developers had tested the application by running it directly from their local environment, the next step was to publish a verified artifact somewhere the rest of the team could pull it from, rather than passing JAR files around manually. This called for a Nexus repository as the artifact store, and a playbook that lets a developer specify a JAR and push it there on demand.
+
+### Nexus Server Setup
+
+The Nexus server itself was provisioned and configured with a separate playbook, [`deploy_nexus.yaml`](https://github.com/lihandafabius/Ansible/blob/main/deploy_nexus.yaml). It installs Java and `net-tools`, downloads and unpacks the Nexus installer, creates a dedicated `nexus` system user/group to own and run the service (rather than running it as root), and starts and verifies the service.
+
+Inside Nexus, rather than using the built-in `admin` account for the upload, I created a separate user scoped to a role with just the permissions needed for the target repository.
+
+![Nexus User](images/user.png)
+
+> **Note on repository policy:** Nexus repositories enforce a version policy — Release, Snapshot, or Mixed. A repository created as Release-only will reject any artifact whose version string ends in `-SNAPSHOT` with an HTTP 400. This was resolved by switching the target repository's policy to Mixed, allowing both release and snapshot artifacts to live in the same repository — a reasonable simplification for a smaller project, where a larger team would more likely split these into two separate repositories.
+
+![nexus repo](images/nexus_repo.png)
+
+### Implementation
+
+With the server and repository in place, the upload itself is handled by a single local play. It prompts for the JAR filename and Nexus credentials, confirms the JAR actually exists before doing anything else, then uploads it via `curl`.
 
 ```yaml
-- name: Upload JAR to Nexus
-  shell: curl -u "{{ nexus_username }}:{{ nexus_password }}" --upload-file "{{ jar_path }}" "{{ nexus_url }}com/example/{{ artifact_id }}/{{ version }}/{{ jar_file }}"
-  no_log: true
+---
+- name: Push Java artifact to Nexus
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_prompt:
+    - name: jar_file
+      prompt: "Enter the JAR filename"
+      private: false
+
+    - name: nexus_username
+      prompt: "Enter Nexus username"
+      private: false
+
+    - name: nexus_password
+      prompt: "Enter Nexus password"
+      private: true
+
+  vars:
+    nexus_url: "http://13.61.19.95:8081/repository/java-app/"
+    group_id: "com.example"
+    artifact_id: "build-tools-exercises"
+    version: "1.0-SNAPSHOT"
+    jar_path: "/home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises/build/libs/{{ jar_file }}"
+
+  tasks:
+
+    - name: Check if JAR exists
+      stat:
+        path: "{{ jar_path }}"
+      register: jar_file_status
+
+    - name: Fail if JAR does not exist
+      fail:
+        msg: "JAR file {{ jar_file }} does not exist."
+      when: not jar_file_status.stat.exists
+
+    - name: Upload JAR to Nexus
+      shell: curl -u "{{ nexus_username }}:{{ nexus_password }}" --upload-file "{{ jar_path }}" "{{ nexus_url }}com/example/{{ artifact_id }}/{{ version }}/{{ jar_file }}"
+      no_log: true
+
+    - name: Display success message
+      debug:
+        msg: "Successfully uploaded {{ jar_file }} to Nexus."
 ```
 
-`no_log: true` prevents the Nexus password from being printed into Ansible's console output or logs.
+Credentials are collected interactively via `vars_prompt` rather than hardcoded, with the password field marked `private: true` so it isn't echoed to the terminal. The `stat` + `fail` combination acts as a guard clause, stopping the play early with a clear message instead of letting `curl` fail obscurely on a missing file.
 
-### Nexus Repository Policy
+> **Note on `no_log: true`:** Because the upload task's command line embeds the Nexus password, `no_log: true` suppresses that task's output in Ansible's logs and console — without it, the credentials would appear in plain text in the run output.
 
-Nexus repositories enforce a version policy — **Release**, **Snapshot**, or **Mixed**. A repository created as Release-only will reject any artifact whose version string ends in `-SNAPSHOT` with an HTTP 400. This was resolved by switching the target repository's policy to **Mixed**, allowing both release and snapshot artifacts to live in the same repository — a reasonable simplification for a smaller project, where a larger team would more likely split these into two separate repositories.
+![Deploy to nexus](images/deploy_to_nexus.png)
+
+![snapshot in repo](images/snapshot.png)
 
 </details>
 
