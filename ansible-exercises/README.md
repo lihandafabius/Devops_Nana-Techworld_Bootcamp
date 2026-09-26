@@ -400,11 +400,17 @@ The playbook is split into two plays:
         msg: "Jenkins is up at {{ inventory_hostname }}. Initial admin password: {{ jenkins_password.stdout }}"
 ```
 
-> **Note on security group scoping:** Rather than opening SSH and the Jenkins web UI to `0.0.0.0/0`, the play calls the `api.ipify.org` service to get the operator's current public IP and locks both the SSH (22) and Jenkins (8080) rules to that single `/32` address. This avoids exposing a fresh, not-yet-hardened Jenkins instance to the whole internet during setup.
+> **Notes:**
+> - **Security group scoping:** Rather than opening SSH and the Jenkins web UI to `0.0.0.0/0`, the play calls the `api.ipify.org` service to get the operator's current public IP and locks both the SSH (22) and Jenkins (8080) rules to that single `/32` address. This avoids exposing a fresh, not-yet-hardened Jenkins instance to the whole internet during setup.
+> - **`add_host` and dynamic inventory:** Since the target host doesn't exist until the first play creates it, `add_host` registers the new instance's public IP into an in-memory `jenkins` group on the fly — along with the correct SSH user and `os_type` fact — so the second play can immediately target it without a separate inventory file.
+> - **OS branching:** Rather than maintaining two separate playbooks, every OS-specific task is guarded with `when: os_type == "..."`, letting Ubuntu use `apt`/`apt_repository` and Amazon Linux use `dnf`/`rpm_key` for the equivalent steps (Java, Jenkins repo setup, Jenkins/Node.js/npm/Docker install), while the provisioning, security group, Docker group membership, service startup, and admin password retrieval stay common to both.
 
-> **Note on `add_host` and dynamic inventory:** Since the target host doesn't exist until the first play creates it, `add_host` registers the new instance's public IP into an in-memory `jenkins` group on the fly — along with the correct SSH user and `os_type` fact — so the second play can immediately target it without a separate inventory file.
+![Choose OS](images/os.png)
 
-> **Note on OS branching:** Rather than maintaining two separate playbooks, every OS-specific task is guarded with `when: os_type == "..."`, letting Ubuntu use `apt`/`apt_repository` and Amazon Linux use `dnf`/`rpm_key` for the equivalent steps (Java, Jenkins repo setup, Jenkins/Node.js/npm/Docker install), while the provisioning, security group, Docker group membership, service startup, and admin password retrieval stay common to both.
+![deploy jenkins server](images/deloy_jenkins.png)
+
+![Jenkins login page](images/jenkins_login.png)
+
 
 </details>
 
