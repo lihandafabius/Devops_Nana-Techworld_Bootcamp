@@ -410,9 +410,8 @@ The playbook is split into two plays:
 > - **Security group scoping:** Rather than opening SSH and the Jenkins web UI to `0.0.0.0/0`, the play calls the `api.ipify.org` service to get the operator's current public IP and locks both the SSH (22) and Jenkins (8080) rules to that single `/32` address. This avoids exposing a fresh, not-yet-hardened Jenkins instance to the whole internet during setup.
 > - **`add_host` and dynamic inventory:** Since the target host doesn't exist until the first play creates it, `add_host` registers the new instance's public IP into an in-memory `jenkins` group on the fly — along with the correct SSH user and `os_type` fact — so the second play can immediately target it without a separate inventory file.
 
-- Only the Docker install step differs between OS flavors (`apt` vs `dnf`); starting Docker and running the Jenkins container is common to both.
 - Mounting `/var/run/docker.sock` and the host's `docker` binary (path resolved dynamically via `which docker`) lets Jenkins run Docker builds against the host's engine instead of nesting its own daemon.
-- The container's Jenkins user has no relation to any host user/group, so host-side group membership doesn't apply. `0666` on the socket is the simple fix; a stricter setup would match the container's group ID to the host's `docker` GID instead.
+- The container's Jenkins user has no relation to any host user/group, so host-side group membership doesn't apply. `0666` on the socket is the simple fix.
 
 ![Choose OS](images/os.png)
 
