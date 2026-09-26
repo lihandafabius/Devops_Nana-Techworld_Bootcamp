@@ -568,6 +568,8 @@ Creates the VPC, both subnets, the Internet Gateway, the NAT Gateway (with its o
 - In a real environment this networking layer would typically already exist, managed separately (e.g. by a networking/platform team or via Terraform) — it's included here to make the exercise fully self-contained.
 - The private route table points `0.0.0.0/0` at the NAT Gateway rather than the Internet Gateway, giving the database server outbound-only access — enough to install packages, but nothing can initiate a connection *into* it from the internet.
 
+![Resource Map](images/resource_map.png)
+
 #### 2. Provision the three servers
 
 Looks up the VPC/subnets created above, creates three chained security groups, then launches the control-plane, web, and database instances — the database instance alone gets `assign_public_ip: false`.
@@ -735,7 +737,7 @@ Looks up the VPC/subnets created above, creates three chained security groups, t
           - "Database server private IP: {{ db_server.instances[0].private_ip_address }}"
 ```
 
-- Security groups reference each other by `group_id` rather than by CIDR, so access follows *identity* (which server you are) rather than *location* (which IP you're coming from) — the web server can reach the DB on 3306 regardless of its own IP, but nothing else can, even from inside the VPC.
+- Som security groups reference each other by `group_id` rather than by CIDR — so access is based on group membership, not IP address. The DB only accepts 3306 from servers in the web server's SG; even if the web server's IP changes, it still gets in, and no other server on the same network can.
 - `assign_public_ip: false` on the database instance is what actually keeps it unreachable from outside the VPC — the private subnet's routing alone wouldn't be enough if the instance also had a public IP.
 
 #### 3. Configure the Ansible control server
