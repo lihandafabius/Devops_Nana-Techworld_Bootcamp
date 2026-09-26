@@ -120,8 +120,6 @@
       apt:
         name:
           - docker.io
-          - nodejs
-          - npm
         state: present
       when: os_type == "ubuntu"
 
@@ -140,8 +138,6 @@
       dnf:
         name:
           - docker
-          - nodejs
-          - npm
         state: present
       when: os_type == "amazon_linux"
 
