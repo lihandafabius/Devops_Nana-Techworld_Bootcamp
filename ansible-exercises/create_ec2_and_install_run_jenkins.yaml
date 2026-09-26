@@ -100,7 +100,7 @@
         state: started
 
 
-- name: Install and run Jenkins
+- name: Install and run Jenkins as a Docker container
   hosts: jenkins
   become: true
 
@@ -116,56 +116,14 @@
         cache_valid_time: 3600
       when: os_type == "ubuntu"
 
-    - name: Install Java on Ubuntu
+    - name: Install Docker, Node.js and npm on Ubuntu
       apt:
         name:
-          - fontconfig
-          - openjdk-21-jre
-        state: present
-      when: os_type == "ubuntu"
-
-    - name: Ensure Ubuntu keyrings directory exists
-      file:
-        path: /etc/apt/keyrings
-        state: directory
-        mode: "0755"
-      when: os_type == "ubuntu"
-
-    - name: Add Jenkins apt key
-      get_url:
-        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
-        dest: /etc/apt/keyrings/jenkins-keyring.asc
-        mode: "0644"
-      when: os_type == "ubuntu"
-
-    - name: Add Jenkins apt repository
-      apt_repository:
-        repo: "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/"
-        state: present
-        filename: jenkins
-      when: os_type == "ubuntu"
-
-    - name: Install Jenkins on Ubuntu
-      apt:
-        name: jenkins
-        state: present
-        update_cache: true
-      when: os_type == "ubuntu"
-
-    - name: Install Node.js and npm on Ubuntu
-      apt:
-        name:
+          - docker.io
           - nodejs
           - npm
         state: present
       when: os_type == "ubuntu"
-
-    - name: Install Docker on Ubuntu
-      apt:
-        name: docker.io
-        state: present
-      when: os_type == "ubuntu"
-
 
     # =========================
     # Amazon Linux
@@ -178,55 +136,18 @@
         update_only: true
       when: os_type == "amazon_linux"
 
-    - name: Install Java on Amazon Linux
-      dnf:
-        name: java-21-amazon-corretto-headless
-        state: present
-      when: os_type == "amazon_linux"
-
-    - name: Add Jenkins RPM repository
-      get_url:
-        url: https://pkg.jenkins.io/redhat-stable/jenkins.repo
-        dest: /etc/yum.repos.d/jenkins.repo
-        mode: "0644"
-      when: os_type == "amazon_linux"
-
-    - name: Import Jenkins RPM key
-      rpm_key:
-        state: present
-        key: https://pkg.jenkins.io/redhat-stable/jenkins.io-2026.key
-      when: os_type == "amazon_linux"
-
-    - name: Install Jenkins on Amazon Linux
-      dnf:
-        name: jenkins
-        state: present
-      when: os_type == "amazon_linux"
-
-    - name: Install Node.js and npm on Amazon Linux
+    - name: Install Docker, Node.js and npm on Amazon Linux
       dnf:
         name:
+          - docker
           - nodejs
           - npm
         state: present
       when: os_type == "amazon_linux"
 
-    - name: Install Docker on Amazon Linux
-      dnf:
-        name: docker
-        state: present
-      when: os_type == "amazon_linux"
-
-
     # =========================
     # Common
     # =========================
-
-    - name: Add Jenkins to Docker group
-      user:
-        name: jenkins
-        groups: docker
-        append: true
 
     - name: Start Docker
       service:
@@ -234,14 +155,36 @@
         state: started
         enabled: true
 
-    - name: Start Jenkins
-      service:
+    - name: Find docker binary path (executable)
+      command: which docker
+      register: docker_result
+      changed_when: false
+
+    - name: Start jenkins container
+
+      community.docker.docker_container:
         name: jenkins
-        state: started
-        enabled: true
+        image: jenkins/jenkins:lts
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
+          - "{{ docker_result.stdout }}:/usr/bin/docker"
+          - jenkins_home:/var/jenkins_home
+        ports:
+          - "8080:8080"
+          - "50000:50000"
+
+    - name: Set Docker socket permission
+      ansible.builtin.file:
+        path: /var/run/docker.sock
+        mode: "0666"
+
+    - name: Wait for Jenkins to initialize
+      wait_for:
+        path: /var/lib/docker/volumes/jenkins_home/_data/secrets/initialAdminPassword
+        timeout: 120
 
     - name: Get initial Jenkins admin password
-      command: cat /var/lib/jenkins/secrets/initialAdminPassword
+      command: docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
       register: jenkins_password
       changed_when: false
 
