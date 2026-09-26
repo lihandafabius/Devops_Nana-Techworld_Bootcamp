@@ -1039,6 +1039,7 @@ Runs from the control server. Installs MySQL on `db` using the existing `geerlin
 - Startup polling (`until`/`retries` on both the process check and the port check) replaces a fixed sleep, so the playbook only reports success once the app has actually finished starting and is genuinely listening — not just "the start command was issued."
 
 </details>
+
 ---
 
 <details>
