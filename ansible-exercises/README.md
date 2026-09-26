@@ -42,16 +42,23 @@ The playbook uses two plays:
   connection: local
   gather_facts: false
 
+  vars_files:
+    - project-vars
+
+
   tasks:
     - name: Build Gradle project
       command: ./gradlew clean build
       args:
-        chdir: /home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises
+        chdir: "{{ local_project_dir }}"
 
 
 - name: Deploy Java application
   hosts: app_server
   become: true
+
+  vars_files:
+    - project-vars
 
   vars_prompt:
     - name: firstname
@@ -86,7 +93,7 @@ The playbook uses two plays:
       changed_when: false
 
     - name: Stop running application
-      shell: "kill {{ app_process.stdout }} || true" # '|| true' ensures Ansible doesn't fail if the app already stopped on
+      shell: "kill {{ app_process.stdout }} || true"
       when: app_process.rc == 0
       changed_when: app_process.rc == 0
 
@@ -97,7 +104,7 @@ The playbook uses two plays:
 
     - name: Copy new jar artifact
       copy:
-        src: /home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises/build/libs/build-tools-exercises-1.0-SNAPSHOT.jar
+        src: "{{ local_project_dir }}/build/libs/build-tools-exercises-1.0-SNAPSHOT.jar"
         dest: /home/ubuntu/app.jar
         mode: "0644"
 
@@ -111,6 +118,8 @@ Before deployment, Ansible ensures that the required Linux user and Java runtime
 > **Note:** `nohup` keeps the Java process running after Ansible's SSH session ends. Without it, the process would terminate when the remote session closes. The `&` runs the application in the background, while the output is redirected to `app.log` located in the specified user's home directory.
 >
 > **Note on `acl` package:** The `acl` (Access Control List) package is required so Ansible can safely switch to run commands as the newly created application user (`become_user: "{{ firstname }}"`). Without it, Linux blocks the non-admin user from reading Ansible's temporary setup files, causing permission errors.
+
+![User prompt](images/deploy_jar_user.png)
 
 </details>
 
