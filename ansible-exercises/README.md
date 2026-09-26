@@ -409,6 +409,7 @@ The playbook is split into two plays:
 > **Notes:**
 > - **Security group scoping:** Rather than opening SSH and the Jenkins web UI to `0.0.0.0/0`, the play calls the `api.ipify.org` service to get the operator's current public IP and locks both the SSH (22) and Jenkins (8080) rules to that single `/32` address. This avoids exposing a fresh, not-yet-hardened Jenkins instance to the whole internet during setup.
 > - **`add_host` and dynamic inventory:** Since the target host doesn't exist until the first play creates it, `add_host` registers the new instance's public IP into an in-memory `jenkins` group on the fly — along with the correct SSH user and `os_type` fact — so the second play can immediately target it without a separate inventory file.
+> - `community.docker.docker_container` is idempotent by design — it checks the container's actual state and config before acting, so rerunning the playbook doesn't fail on a name conflict or blindly recreate a container that's already correct, the way a raw `docker run` via `command` would.
 
 - Mounting `/var/run/docker.sock` and the host's `docker` binary (path resolved dynamically via `which docker`) lets Jenkins run Docker builds against the host's engine instead of nesting its own daemon.
 - The container's Jenkins user has no relation to any host user/group, so host-side group membership doesn't apply. `0666` on the socket is the simple fix.
@@ -418,47 +419,6 @@ The playbook is split into two plays:
 ![deploy jenkins server](images/deloy_jenkins.png)
 
 ![Jenkins login page](images/jenkins_login.png)
-
-</details>
-
----
-
-<details>
-<summary>Exercise 5: Install Jenkins as a Docker Container</summary>
-
-<br />
-
-Rather than installing Jenkins as a system package, this variant runs it as a Docker container — with volumes for both the Jenkins home directory and the host's own Docker socket/binary, so pipelines running *inside* Jenkins can still invoke `docker` commands on the host.
-
-The reference `docker run` command was mapped into an idempotent Ansible task set that checks the container's actual state before acting:
-
-```yaml
-- name: Check if a Jenkins container already exists
-  command: docker inspect -f "{{ '{{.State.Running}}' }}" jenkins
-  register: jenkins_running
-  failed_when: false
-  changed_when: false
-
-- name: Start the existing Jenkins container if it's stopped
-  command: docker start jenkins
-  when: jenkins_running.rc == 0 and jenkins_running.stdout == "false"
-
-- name: Run a new Jenkins container (none exists yet)
-  command: >
-    docker run
-    --name jenkins
-    -p 8080:8080
-    -p 50000:50000
-    -d
-    -u root
-    -v /var/run/docker.sock:/var/run/docker.sock
-    -v /usr/bin/docker:/usr/bin/docker
-    -v jenkins_home:/var/jenkins_home
-    jenkins/jenkins:lts
-  when: jenkins_running.rc != 0
-```
-
-This three-way branch covers every possible state the container could be in — not-exists, exists-but-stopped, exists-and-running — making the playbook safe to rerun any number of times without erroring on "container name already in use."
 
 </details>
 
