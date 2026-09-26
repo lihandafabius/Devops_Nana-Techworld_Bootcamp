@@ -209,94 +209,202 @@ Credentials are collected interactively via `vars_prompt` rather than hardcoded,
 ---
 
 <details>
-<summary>Exercise 3 & 4: Install Jenkins on EC2 (Ubuntu and Amazon Linux)</summary>
+<summary> Project 3: Dynamically Provision Jenkins on EC2 or Ubuntu</summary>
 
 <br />
 
-The next requirement was to spin up a fully-configured Jenkins server — Java, the Jenkins package itself, Node.js/npm, and Docker (so Jenkins jobs can build containers) — with a single Ansible command. The playbook was later extended to support **both** Ubuntu and Amazon Linux, since the company runs infrastructure on multiple OS flavors.
+Up to this point Jenkins servers had to be created and configured by hand whenever the team needed one. The goal here was to remove that bottleneck entirely: a single Ansible command should be able to spin up a brand-new server and come back with a fully working Jenkins instance, ready for builds. Since the company also runs infrastructure outside AWS, the same playbook needed to support installing onto an existing Ubuntu server as well as provisioning a fresh EC2 instance — one codebase, two OS flavors, selected at runtime.
 
-### Dynamic AMI Lookup
+### Implementation
 
-Rather than hardcoding AMI IDs (which go stale and are region-specific), the playbook resolves the current AMI at runtime via AWS SSM public parameters, selected per OS:
+The playbook is split into two plays:
 
-```yaml
-os_config:
-  ubuntu:
-    ssh_user: "ubuntu"
-    ami_ssm_path: "/aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id"
-  amazon_linux:
-    ssh_user: "ec2-user"
-    ami_ssm_path: "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
-```
+- **Provision:** First play. Runs locally, asks which OS to target, provisions the EC2 instance and its security group (only for the EC2 path), and dynamically adds the new host to the in-memory inventory.
+- **Configure:** Second play. Connects to whichever host resulted from the first play and installs Java, Jenkins, Node.js/npm and Docker, branching between `apt` and `dnf` depending on `os_type`.
 
 ```yaml
-- name: Look up the current AMI ID for the chosen OS
-  set_fact:
-    ami_id: "{{ lookup('amazon.aws.aws_ssm', os_config[os_type].ami_ssm_path, region=aws_region) }}"
+---
+- name: Create an EC2 instance
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_prompt:
+    - name: os_type
+      prompt: "Which OS do you want to install? (ubuntu/amazon_linux)"
+      private: false
+
+  vars:
+    aws_region: "eu-north-1"
+    instance_type: "t3.small"
+    ami_ids:
+      ubuntu: "ami-0aba19e56f3eaec05"
+      amazon_linux: "ami-06cfeaaa22092f09d"
+    key_name: "jenkins"
+    key_file: "~/.ssh/jenkins.pem"
+    instance_name: "jenkins-server"
+    sg_name: "jenkins-server-sg"
+
+  tasks:
+    - name: Set AMI ID
+      set_fact:
+        ami_id: "{{ ami_ids[os_type] }}"
+
+    - name: Get my current public IP
+      uri:
+        url: https://api.ipify.org
+        return_content: true
+      register: my_ip
+
+    - name: Create security group
+      amazon.aws.ec2_security_group:
+        name: "{{ sg_name }}"
+        description: "Allow SSH and Jenkins traffic from my IP only"
+        region: "{{ aws_region }}"
+        rules:
+          - proto: tcp
+            ports: [22]
+            cidr_ip: "{{ my_ip.content }}/32"
+            rule_desc: "SSH from my IP"
+          - proto: tcp
+            ports: [8080]
+            cidr_ip: "{{ my_ip.content }}/32"
+            rule_desc: "Access Jenkins from my IP"
+
+    - name: Launch EC2 instance
+      amazon.aws.ec2_instance:
+        name: "{{ instance_name }}"
+        key_name: "{{ key_name }}"
+        instance_type: "{{ instance_type }}"
+        image_id: "{{ ami_id }}"
+        region: "{{ aws_region }}"
+        security_group: "{{ sg_name }}"
+        wait: true
+        state: running
+        tags:
+          Environment: "dev"
+      register: ec2_result
+
+    - name: Add Ubuntu instance to inventory
+      add_host:
+        name: "{{ ec2_result.instances[0].public_ip_address }}"
+        groups: jenkins
+        ansible_user: ubuntu
+        ansible_ssh_private_key_file: "{{ key_file }}"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+        os_type: "{{ os_type }}"
+      when: os_type == "ubuntu"
+
+    - name: Add Amazon Linux instance to inventory
+      add_host:
+        name: "{{ ec2_result.instances[0].public_ip_address }}"
+        groups: jenkins
+        ansible_user: ec2-user
+        ansible_ssh_private_key_file: "{{ key_file }}"
+        ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
+        os_type: "{{ os_type }}"
+      when: os_type == "amazon_linux"
+
+    - name: Wait for SSH to come up
+      wait_for:
+        host: "{{ ec2_result.instances[0].public_ip_address }}"
+        port: 22
+        delay: 5
+        timeout: 180
+        state: started
+
+
+- name: Install and run Jenkins
+  hosts: jenkins
+  become: true
+
+  tasks:
+
+    # ---- Ubuntu ----
+    - name: Install Java on Ubuntu
+      apt:
+        name: [fontconfig, openjdk-21-jre]
+        state: present
+      when: os_type == "ubuntu"
+
+    - name: Add Jenkins apt key
+      get_url:
+        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+        dest: /etc/apt/keyrings/jenkins-keyring.asc
+      when: os_type == "ubuntu"
+
+    - name: Add Jenkins apt repository
+      apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/"
+        filename: jenkins
+      when: os_type == "ubuntu"
+
+    - name: Install Jenkins, Node.js, npm, Docker on Ubuntu
+      apt:
+        name: [jenkins, nodejs, npm, docker.io]
+        state: present
+        update_cache: true
+      when: os_type == "ubuntu"
+
+    # ---- Amazon Linux ----
+    - name: Install Java on Amazon Linux
+      dnf:
+        name: java-21-amazon-corretto-headless
+        state: present
+      when: os_type == "amazon_linux"
+
+    - name: Add Jenkins RPM repository
+      get_url:
+        url: https://pkg.jenkins.io/redhat-stable/jenkins.repo
+        dest: /etc/yum.repos.d/jenkins.repo
+      when: os_type == "amazon_linux"
+
+    - name: Import Jenkins RPM key
+      rpm_key:
+        state: present
+        key: https://pkg.jenkins.io/redhat-stable/jenkins.io-2026.key
+      when: os_type == "amazon_linux"
+
+    - name: Install Jenkins, Node.js, npm, Docker on Amazon Linux
+      dnf:
+        name: [jenkins, nodejs, npm, docker]
+        state: present
+      when: os_type == "amazon_linux"
+
+    # ---- Common ----
+    - name: Add Jenkins to Docker group
+      user:
+        name: jenkins
+        groups: docker
+        append: true
+
+    - name: Start Docker
+      service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Start Jenkins
+      service:
+        name: jenkins
+        state: started
+        enabled: true
+
+    - name: Get initial Jenkins admin password
+      command: cat /var/lib/jenkins/secrets/initialAdminPassword
+      register: jenkins_password
+      changed_when: false
+
+    - name: Display Jenkins information
+      debug:
+        msg: "Jenkins is up at {{ inventory_hostname }}. Initial admin password: {{ jenkins_password.stdout }}"
 ```
 
-### Security Group Scoped to the Caller's IP
+> **Note on security group scoping:** Rather than opening SSH and the Jenkins web UI to `0.0.0.0/0`, the play calls the `api.ipify.org` service to get the operator's current public IP and locks both the SSH (22) and Jenkins (8080) rules to that single `/32` address. This avoids exposing a fresh, not-yet-hardened Jenkins instance to the whole internet during setup.
 
-Rather than opening SSH/Jenkins to the world, the playbook detects the operator's current public IP and scopes both rules to it:
+> **Note on `add_host` and dynamic inventory:** Since the target host doesn't exist until the first play creates it, `add_host` registers the new instance's public IP into an in-memory `jenkins` group on the fly — along with the correct SSH user and `os_type` fact — so the second play can immediately target it without a separate inventory file.
 
-```yaml
-- name: Get my current public IP
-  uri:
-    url: https://api.ipify.org
-    return_content: true
-  register: my_ip
-
-- name: Create security group with SSH and Jenkins port open to my IP only
-  amazon.aws.ec2_security_group:
-    rules:
-      - proto: tcp
-        ports: [22]
-        cidr_ip: "{{ my_ip.content }}/32"
-      - proto: tcp
-        ports: [8080]
-        cidr_ip: "{{ my_ip.content }}/32"
-```
-
-### From EC2 Instance to Reachable Host
-
-`add_host` registers the freshly-launched instance's public IP into an in-memory inventory group, so a second play in the same playbook run can immediately target and configure it — no manual inventory file needed:
-
-```yaml
-- name: Add new instance to in-memory inventory
-  add_host:
-    name: "{{ ec2_result.instances[0].public_ip_address }}"
-    groups: jenkins
-    ansible_user: "{{ os_config[os_type].ssh_user }}"
-    ansible_ssh_private_key_file: "{{ key_file }}"
-    ansible_ssh_common_args: "-o StrictHostKeyChecking=no"
-
-- name: Wait for SSH to come up on the new instance
-  wait_for:
-    host: "{{ ec2_result.instances[0].public_ip_address }}"
-    port: 22
-    delay: 5
-    timeout: 180
-```
-
-### Cross-OS Support via Conditionals
-
-Every OS-sensitive task (package manager, Jenkins signing-key mechanism, package names) is duplicated with `(Debian)`/`(RedHat)` labels and a matching `when:` guard on `ansible_os_family`:
-
-```yaml
-- name: (Debian) Install Docker
-  apt:
-    name: docker.io
-    state: present
-  when: ansible_os_family == "Debian"
-
-- name: (RedHat) Install Docker
-  dnf:
-    name: docker
-    state: present
-  when: ansible_os_family == "RedHat"
-```
-
-Everything downstream of that split — starting Docker, adding the `jenkins` user to the `docker` group, starting Jenkins, retrieving the initial admin password — runs unconditionally, shared by both branches.
+> **Note on OS branching:** Rather than maintaining two separate playbooks, every OS-specific task is guarded with `when: os_type == "..."`, letting Ubuntu use `apt`/`apt_repository` and Amazon Linux use `dnf`/`rpm_key` for the equivalent steps (Java, Jenkins repo setup, Jenkins/Node.js/npm/Docker install), while the provisioning, security group, Docker group membership, service startup, and admin password retrieval stay common to both.
 
 </details>
 
