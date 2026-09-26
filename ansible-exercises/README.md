@@ -213,7 +213,7 @@ Credentials are collected interactively via `vars_prompt` rather than hardcoded,
 
 <br />
 
-Up to this point Jenkins servers had to be created and configured by hand whenever the team needed one. The goal here was to remove that bottleneck entirely: a single Ansible command should be able to spin up a brand-new server and come back with a fully working Jenkins instance, ready for builds. Since the company also runs infrastructure outside AWS, the same playbook needed to support installing onto an existing Ubuntu server as well as provisioning a fresh EC2 instance — one codebase, two OS flavors, selected at runtime. Jenkins itself is run as a Docker container here rather than installed as a native package, since the same container image works identically across both OS flavors and avoids managing a separate Jenkins repo/key per distribution among many other reasons.
+Up to this point Jenkins servers had to be created and configured by hand whenever the team needed one. The goal here was to remove that bottleneck entirely: a single Ansible command should be able to spin up a brand-new server and come back with a fully working Jenkins instance, ready for builds. Since the company also runs infrastructure outside AWS, the same playbook needed to support installing onto an existing Ubuntu server as well as provisioning a fresh EC2 instance — one codebase, two OS flavors, selected at runtime. Jenkins itself is run as a Docker container here rather than installed as a native package.
 
 ### Implementation
 
