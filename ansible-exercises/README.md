@@ -435,7 +435,7 @@ Since the database server has no direct internet access, package installation fo
 
 ### Architecture
 
-![Architecture](images/simple_architecture.png)
+![Architecture](images/architecture.png)
 
 ### Implementation
 
