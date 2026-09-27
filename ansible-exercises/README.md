@@ -737,12 +737,18 @@ Looks up the VPC/subnets created above, creates three chained security groups, t
           - "Database server private IP: {{ db_server.instances[0].private_ip_address }}"
 ```
 
-- Som security groups reference each other by `group_id` rather than by CIDR — so access is based on group membership, not IP address. The DB only accepts 3306 from servers in the web server's SG; even if the web server's IP changes, it still gets in, and no other server on the same network can.
+- Som security groups reference each other by `group_id` rather than by CIDR — so access is based on group membership, not IP address. eg The DB only accepts 3306 from servers in the web server's SG; even if the web server's IP changes, it still gets in, and no other server on the same network can.
 - `assign_public_ip: false` on the database instance is what actually keeps it unreachable from outside the VPC — the private subnet's routing alone wouldn't be enough if the instance also had a public IP.
 
 #### 3. Configure the Ansible control server
 
-Looks up all three running instances, then connects to the control server to install Python/Ansible, install the `geerlingguy.mysql` role from Galaxy, and stage everything the next playbook needs — the SSH private key, a generated `inventory.ini` targeting the web and DB servers by *private* IP, the built jar, and the deploy playbook itself. It finishes by running that deploy playbook from the control server.
+This playbook looks up the three running instances, then connects to the control server to install Python/Ansible, install the `geerlingguy.mysql` role from Galaxy, and stage everything the next playbook needs — the SSH private key, a generated `inventory.ini` targeting the web and DB servers by *private* IP, the built jar, and the deploy playbook itself. It finishes by running that deploy playbook from the control server.
+
+The inventory is generated as a task here rather than written by hand or pulled from a dynamic `aws_ec2` inventory plugin, for a couple of reasons:
+
+- `ec2_instance_info` runs from the local machine, which already has AWS credentials configured — the control server itself never needs to know anything about AWS.
+- A dynamic inventory plugin would require the *control server* to query the AWS API live at deploy time, meaning `boto3`/`botocore` and valid AWS credentials (an IAM role or copied keys) would need to live there too.
+- Generating a static `inventory.ini` and copying it over keeps AWS access confined to the local machine, and stays correct across re-provisioning since it's rebuilt from freshly looked-up IPs each run — without needing AWS credentials anywhere inside the VPC.
 
 ```yaml
 ---
