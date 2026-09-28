@@ -435,7 +435,7 @@ Since the database server has no direct internet access, package installation fo
 
 ### Architecture
 
-![Architecture](images/simple_architecture.png)
+![Architecture](images/architecture.png)
 
 ### Implementation
 
@@ -737,12 +737,18 @@ Looks up the VPC/subnets created above, creates three chained security groups, t
           - "Database server private IP: {{ db_server.instances[0].private_ip_address }}"
 ```
 
-- Som security groups reference each other by `group_id` rather than by CIDR — so access is based on group membership, not IP address. The DB only accepts 3306 from servers in the web server's SG; even if the web server's IP changes, it still gets in, and no other server on the same network can.
+- Som security groups reference each other by `group_id` rather than by CIDR — so access is based on group membership, not IP address. eg The DB only accepts 3306 from servers in the web server's SG; even if the web server's IP changes, it still gets in, and no other server on the same network can.
 - `assign_public_ip: false` on the database instance is what actually keeps it unreachable from outside the VPC — the private subnet's routing alone wouldn't be enough if the instance also had a public IP.
 
 #### 3. Configure the Ansible control server
 
-Looks up all three running instances, then connects to the control server to install Python/Ansible, install the `geerlingguy.mysql` role from Galaxy, and stage everything the next playbook needs — the SSH private key, a generated `inventory.ini` targeting the web and DB servers by *private* IP, the built jar, and the deploy playbook itself. It finishes by running that deploy playbook from the control server.
+This playbook looks up the three running instances, then connects to the control server to install Python/Ansible, install the `geerlingguy.mysql` role from Galaxy, and stage everything the next playbook needs — the SSH private key, a generated `inventory.ini` targeting the web and DB servers by *private* IP, the built jar, and the deploy playbook itself. It finishes by running that deploy playbook from the control server.
+
+The inventory is generated as a task here rather than written by hand or pulled from a dynamic `aws_ec2` inventory plugin, for a couple of reasons:
+
+- `ec2_instance_info` runs from the local machine, which already has AWS credentials configured — the control server itself never needs to know anything about AWS.
+- A dynamic inventory plugin would require the *control server* to query the AWS API live at deploy time, meaning `boto3`/`botocore` and valid AWS credentials (an IAM role or copied keys) would need to live there too.
+- Generating a static `inventory.ini` and copying it over keeps AWS access confined to the local machine, and stays correct across re-provisioning since it's rebuilt from freshly looked-up IPs each run — without needing AWS credentials anywhere inside the VPC.
 
 ```yaml
 ---
@@ -1034,9 +1040,10 @@ Runs from the control server. Installs MySQL on `db` using the existing `geerlin
       delay: 2
       changed_when: false
 ```
+> **Notes:** The `mysql_native_password=ON` override exists because newer MySQL defaults to `caching_sha2_password`, which the app's DB driver may not support — this keeps authentication compatible without changing the application. It's applied via `mysql_config_include_files`, which the role documents as *"a list of files that should override the default global my.cnf"* ([role docs](https://github.com/geerlingguy/ansible-role-mysql)).
+
 
 - Using an existing, maintained role (`geerlingguy.mysql`) instead of writing raw install/config tasks avoids re-solving problems the community has already handled — version quirks, config templating, and platform differences.
-- The `mysql_native_password=ON` override exists because newer MySQL defaults to `caching_sha2_password`, which the app's DB driver may not support — this keeps authentication compatible without changing the application.
 - `mysql_bind_address: "0.0.0.0"` is a deliberate deviation from the role's default (`127.0.0.1`, localhost-only) — required so the web server can reach MySQL at all, since it connects over the private network rather than from the same host.
 - Startup polling (`until`/`retries` on both the process check and the port check) replaces a fixed sleep, so the playbook only reports success once the app has actually finished starting and is genuinely listening — not just "the start command was issued."
 
