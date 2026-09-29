@@ -1,9 +1,21 @@
-apiVersion: monitoring.coreos.com/v1beta1
+apiVersion: monitoring.coreos.com/v1alpha1
 kind: AlertmanagerConfig
 metadata:
   name: main-rules-alert-config
   namespace: monitoring
 spec:
+  route:
+    receiver: 'email'
+    repeatInterval: 30m  # if the issue still persist send another email in 30 mins time
+    routes:
+    - matchers:
+      - name: alertname
+        value: HostHighCpuLoad
+    - matchers:
+      - name: alertname
+        value: KubernetesPodCrashLooping
+      repeatInterval: 10m
+
   receivers:
   - name: 'email'
     emailConfigs:
