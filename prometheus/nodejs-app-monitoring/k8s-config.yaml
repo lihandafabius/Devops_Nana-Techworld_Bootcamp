@@ -38,22 +38,22 @@ spec:
     protocol: TCP
     port: 3000
     targetPort: 3000
-# ---
-# apiVersion: monitoring.coreos.com/v1
-# kind: ServiceMonitor
-# metadata:
-#   name: monitoring-node-app
-#   labels:
-#     release: monitoring
-#     app: nodeapp
-# spec:
-#   endpoints:
-#   - path: /metrics
-#     port: service
-#     targetPort: 3000
-#   namespaceSelector:
-#     matchNames:
-#     - default
-#   selector:
-#     matchLabels:
-#       app: nodeapp
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: monitoring-node-app
+  labels:
+    release: monitoring
+    app: nodeapp
+spec:
+  endpoints:
+  - path: /metrics
+    port: service
+    targetPort: 3000
+  namespaceSelector: # enables prometheus to discover it since it is in another ns
+    matchNames:
+    - default
+  selector:
+    matchLabels:
+      app: nodeapp
