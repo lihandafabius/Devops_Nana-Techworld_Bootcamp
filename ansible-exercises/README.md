@@ -913,7 +913,7 @@ The inventory is generated as a task here rather than written by hand or pulled 
 
 #### 4. Deploy MySQL and the Java application
 
-Runs from the control server. Installs MySQL on `db` using the existing `geerlingguy.mysql` role rather than hand-writing that logic, and deploys the Java app on `web`, pointed at the database's private IP via environment variables.
+Runs from the control server. Installs MySQL on `db` using the existing `geerlingguy.mysql` role rather than hand-writing that logic, and deploys the Java app on `web`, pointed at the database's private IP via environment variables. 
 
 ```yaml
 ---
@@ -933,7 +933,7 @@ Runs from the control server. Installs MySQL on `db` using the existing `geerlin
 
   vars:
     mysql_root_password: "rootpass"
-    mysql_bind_address: "0.0.0.0"
+    mysql_bind_address: "0.0.0.0"  # Allows the web server to reach MySQL as localhost at all, since it connects over the private network rather than from the same host.
     mysql_config_include_files:
       - src: "/home/ubuntu/mysql-native-password-override.cnf"
     mysql_databases:
@@ -1040,12 +1040,25 @@ Runs from the control server. Installs MySQL on `db` using the existing `geerlin
       delay: 2
       changed_when: false
 ```
-> **Notes:** The `mysql_native_password=ON` override exists because newer MySQL defaults to `caching_sha2_password`, which the app's DB driver may not support — this keeps authentication compatible without changing the application. It's applied via `mysql_config_include_files`, which the role documents as *"a list of files that should override the default global my.cnf"* ([role docs](https://github.com/geerlingguy/ansible-role-mysql)).
+> **Notes:** The `mysql_native_password=ON` override is used since newer MySQL defaults to `caching_sha2_password`, which the app's DB driver may not support — this keeps authentication compatible without changing the application. It's applied via `mysql_config_include_files`, which the role documents as *"a list of files that should override the default global my.cnf"* ([role docs](https://github.com/geerlingguy/ansible-role-mysql)).
 
 
-- Using an existing, maintained role (`geerlingguy.mysql`) instead of writing raw install/config tasks avoids re-solving problems the community has already handled — version quirks, config templating, and platform differences.
-- `mysql_bind_address: "0.0.0.0"` is a deliberate deviation from the role's default (`127.0.0.1`, localhost-only) — required so the web server can reach MySQL at all, since it connects over the private network rather than from the same host.
-- Startup polling (`until`/`retries` on both the process check and the port check) replaces a fixed sleep, so the playbook only reports success once the app has actually finished starting and is genuinely listening — not just "the start command was issued."
+#### Verify Application and Database Access
+
+With both servers deployed, the setup can be verified three ways:
+
+- **API/DB connectivity:** SSHing into the Ansible control server, then `curl http://<web-server-private-ip>:8080/get-data` — a successful response returns a JSON list of team members and their roles, confirming the web app can reach and query the database.
+
+![Verify API and process](images/test_api.png)
+
+- **Database tables directly:** From the Ansible control server, SSHing into the database server's private instance and inspect the tables via the `mysql` client to confirm the schema and data landed correctly.
+
+![Verify DB](images/db.png)
+
+- **Browser access:** Finally, the app is confirmed reachable from a browser at `http://<web-server-public-ip>:8080`, which only the public-facing web server exposes — the database remains unreachable from outside the VPC throughout.
+
+![Verify App broser access](images/app.png)
+
 
 </details>
 
