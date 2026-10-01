@@ -39,6 +39,21 @@
         state: present
         kubeconfig: "{{ kubeconfig }}"
 
+    - name: Create Docker registry secret for image pull
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: my-registry-key
+            namespace: java-app
+          type: kubernetes.io/dockerconfigjson
+          stringData:
+            .dockerconfigjson: "{{ {'auths': {'https://index.docker.io/v1/': {'username': docker_username, 'password': docker_password, 'auth': (docker_username + ':' + docker_password) | b64encode}}} | to_json }}"
+
+
     - name: Apply mysql secret
       kubernetes.core.k8s:
         src: "{{ manifest_dir }}/mysql_secret.yaml"
