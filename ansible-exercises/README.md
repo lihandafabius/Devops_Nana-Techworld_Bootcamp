@@ -1089,7 +1089,7 @@ The manifests this playbook deploys — a Deployment/Service for the Java app, a
   vars:
     kubeconfig: "/home/fabius-lihanda/Devops/terraform/eks_cluster/kubeconfig_myapp_eks_cluster.yaml"
     manifest_dir: "/home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises/k8_manifests"
-    docker_app_dir: "/home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises"
+    docker_app_dir: "/home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises/java-app"
     docker_image: "{{ docker_username }}/demo-app:java-app-3.0"
 
   tasks:
