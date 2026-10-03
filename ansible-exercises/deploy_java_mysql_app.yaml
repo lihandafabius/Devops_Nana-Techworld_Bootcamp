@@ -12,8 +12,59 @@
     docker_image: "{{ docker_username }}/demo-app:java-app-3.1"
 
   tasks:
+    - name: Create java app namespace
+      kubernetes.core.k8s:
+        name: java-app
+        api_version: v1
+        kind: Namespace
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
 
-    
+    - name: Add NGINX Ingress Repository
+      kubernetes.core.helm_repository:
+        name: ingress-nginx
+        repo_url: https://kubernetes.github.io/ingress-nginx
+
+    - name: Deploy NGINX Ingress Controller via Helm
+      kubernetes.core.helm:
+        name: ingress-nginx
+        chart_ref: ingress-nginx/ingress-nginx
+        release_namespace: ingress-nginx
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig }}"
+
+    - name: Get NGINX Ingress LoadBalancer Hostname
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig }}"
+        kind: Service
+        name: ingress-nginx-controller
+        namespace: ingress-nginx
+      register: ingress_service
+      until: ingress_service.resources[0].status.loadBalancer.ingress[0].hostname is defined
+      retries: 20
+      delay: 5
+
+    - name: Set ALB Hostname Variable
+      ansible.builtin.set_fact:
+        alb_hostname: "{{ ingress_service.resources[0].status.loadBalancer.ingress[0].hostname }}"
+
+    - name: Update host in ingress.yaml manifest
+      ansible.builtin.replace:
+        path: "{{ manifest_dir }}/ingress.yaml"
+        regexp: 'host: ".*"'
+        replace: 'host: "{{ alb_hostname }}"'
+
+    - name: Update const HOST in index.html frontend file
+      ansible.builtin.replace:
+        path: "{{ docker_app_dir }}/src/main/resources/static/index.html"
+        regexp: 'const HOST = ".*";'
+        replace: 'const HOST = "http://{{ alb_hostname }}";'
+
+    - name: Build Gradle project to package updated frontend JAR
+      ansible.builtin.command: ./gradlew clean build
+      args:
+        chdir: "{{ docker_app_dir }}"
+
     - name: Log in to Docker Hub
       community.docker.docker_login:
         username: "{{ docker_username }}"
@@ -33,14 +84,6 @@
         push: true
         source: local
 
-    - name: Create java app namespace
-      kubernetes.core.k8s:
-        name: java-app
-        api_version: v1
-        kind: Namespace
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-    
     - name: Create Docker registry secret for image pull
       kubernetes.core.k8s:
         kubeconfig: "{{ kubeconfig }}"
@@ -54,12 +97,6 @@
           type: kubernetes.io/dockerconfigjson
           stringData:
             .dockerconfigjson: "{{ {'auths': {'https://index.docker.io/v1/': {'username': docker_username, 'password': docker_password, 'auth': (docker_username + ':' + docker_password) | b64encode}}} | to_json }}"
-
-    # used if do not have Bitnami Helm Repo installed
-    # - name: Add Bitnami Helm Repository
-    #   kubernetes.core.helm_repository:
-    #     name: bitnami
-    #     repo_url: https://charts.bitnami.com/bitnami
 
     - name: Apply mysql secret
       kubernetes.core.k8s:
@@ -88,21 +125,14 @@
         state: present
         kubeconfig: "{{ kubeconfig }}"
 
-    - name: Add NGINX Ingress Repository
-      kubernetes.core.helm_repository:
-        name: ingress-nginx
-        repo_url: https://kubernetes.github.io/ingress-nginx
-
-    - name: Deploy NGINX Ingress Controller via Helm
-      kubernetes.core.helm:
-        name: ingress-nginx
-        chart_ref: ingress-nginx/ingress-nginx
-        release_namespace: ingress-nginx
-        create_namespace: true
-        kubeconfig: "{{ kubeconfig }}"
-
     - name: Apply Ingress rule for Java App
       kubernetes.core.k8s:
         src: "{{ manifest_dir }}/ingress.yaml"
         state: present
         kubeconfig: "{{ kubeconfig }}"
+
+    - name: Restart Java App deployment to pull fresh Docker image
+      ansible.builtin.command: >
+        kubectl rollout restart deployment/java-mysql-app
+        -n java-app
+        --kubeconfig="{{ kubeconfig }}"

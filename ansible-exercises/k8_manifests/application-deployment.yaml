@@ -19,7 +19,7 @@ spec:
       - name: my-registry-key
       containers:
       - name: java-mysql-app
-        image: lihanda/demo-app:java-app-3.0
+        image: lihanda/demo-app:java-app-3.1
         imagePullPolicy: Always
 
         ports:
