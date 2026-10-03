@@ -1065,104 +1065,162 @@ With both servers deployed, the setup can be verified three ways:
 ---
 
 <details>
-<summary>Exercise 7: Deploy Java + MySQL Application in Kubernetes</summary>
+<summary> Project 5: Deploy Java MySQL Application to Kubernetes</summary>
 
 <br />
 
-The team decided to modernize onto Kubernetes, but explicitly did not want to learn `kubectl` or raw manifest syntax — the whole point of this exercise was that deployment stays a single Ansible command, with all the Kubernetes-specific detail hidden inside version-controlled manifest files.
+Having outgrown the traditional server setup, the team wanted to move to Kubernetes — but with one condition: they didn't want to learn `kubectl` or K8s manifest syntax themselves. So the ask wasn't just "deploy this to K8s," it was "make deploying to K8s a single command for people who don't know Kubernetes."
 
-### Cluster and Storage
+The cluster itself was provisioned separately via Terraform (see [Terraform EKS project](https://github.com/lihandafabius/terraform-eks-infrastructure)). 
 
-The EKS cluster was provisioned with Terraform (`terraform-aws-modules/eks`), and a `StorageClass` backed by the EBS CSI driver was created so PersistentVolumeClaims could be dynamically provisioned:
+![Create Cluster ](images/cluster.png)
 
-```yaml
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: auto-ebs
-provisioner: ebs.csi.eks.amazonaws.com
-volumeBindingMode: WaitForFirstConsumer
-parameters:
-  type: gp3
-allowVolumeExpansion: true
-```
+The manifests this playbook deploys — a Deployment/Service for the Java app, a ConfigMap and Secret for DB connectivity, a MySQL Deployment/Service backed by a PVC, and an Ingress resource — live in the k8_manifests folder. What ties it all together is a single Ansible playbook: it builds the app's image, pushes it to Docker Hub, and applies every manifest to the cluster in one run — so the team's entire interaction with Kubernetes is one ansible-playbook command.
 
-### MySQL: Secret, PVC, Deployment, Service
-
-A single-replica MySQL Deployment was defined with a mounted PVC for persistence, and a `Recreate` deployment strategy — required because a `ReadWriteOnce` EBS volume can only be mounted by one pod at a time, and the default `RollingUpdate` strategy would try to start a second pod before killing the first:
+### Implementation
 
 ```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: mysql
-  namespace: java-app
-spec:
-  replicas: 1
-  strategy:
-    type: Recreate
-  template:
-    spec:
-      containers:
-        - name: mysql
-          image: mysql:8.4
-          env:
-            - name: MYSQL_ROOT_PASSWORD
-              valueFrom:
-                secretKeyRef: { name: mysql-secret, key: MYSQL_ROOT_PASSWORD }
-            - name: MYSQL_USER
-              valueFrom:
-                secretKeyRef: { name: mysql-secret, key: DB_USER }
-            - name: MYSQL_PASSWORD
-              valueFrom:
-                secretKeyRef: { name: mysql-secret, key: DB_PWD }
-          volumeMounts:
-            - name: mysql-storage
-              mountPath: /var/lib/mysql
-      volumes:
-        - name: mysql-storage
-          persistentVolumeClaim:
-            claimName: mysql-pvc
+---
+- name: Deploy java mysql app to k8's cluster
+  hosts: localhost
+  vars_files:
+    - project-vars
+
+  vars:
+    kubeconfig: "/home/fabius-lihanda/Devops/terraform/eks_cluster/kubeconfig_myapp_eks_cluster.yaml"
+    manifest_dir: "/home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises/k8_manifests"
+    docker_app_dir: "/home/fabius-lihanda/Devops/Devops_Nana-Techworld_Bootcamp/ansible-exercises/java-app"
+    docker_image: "{{ docker_username }}/demo-app:java-app-3.0"
+
+  tasks:
+    - name: Log in to Docker Hub
+      community.docker.docker_login:
+        username: "{{ docker_username }}"
+        password: "{{ docker_password }}"
+
+    - name: Build Docker image for Java App
+      community.docker.docker_image:
+        build:
+          path: "{{ docker_app_dir }}"
+        name: "{{ docker_image }}"
+        source: build
+        force_source: true
+
+    - name: Push Java App image to Docker Hub
+      community.docker.docker_image:
+        name: "{{ docker_image }}"
+        push: true
+        source: local
+
+    - name: Create java app namespace
+      kubernetes.core.k8s:
+        name: java-app
+        api_version: v1
+        kind: Namespace
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+
+    - name: Create Docker registry secret for image pull
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: my-registry-key
+            namespace: java-app
+          type: kubernetes.io/dockerconfigjson
+          stringData:
+            .dockerconfigjson: "{{ {'auths': {'https://index.docker.io/v1/': {'username': docker_username, 'password': docker_password, 'auth': (docker_username + ':' + docker_password) | b64encode}}} | to_json }}"
+
+    - name: Apply mysql secret
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/mysql_secret.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+
+    - name: Apply mysql configmap
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/applicationconfig.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+
+    - name: Deploy mysql
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/mysql.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+
+    - name: Deploy Java Application and Service
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/application-deployment.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+
+    - name: Deploy NGINX Ingress Controller via Helm
+      kubernetes.core.helm:
+        name: ingress-nginx
+        chart_ref: ingress-nginx/ingress-nginx
+        release_namespace: ingress-nginx
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig }}"
+
+    - name: Apply Ingress rule for Java App
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/ingress.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
 ```
 
-Note the `MYSQL_USER`/`MYSQL_PASSWORD` env vars are mapped from `DB_USER`/`DB_PWD` secret keys rather than using `envFrom` — the secret's key names match what the *Java application* expects via `System.getenv()`, while MySQL's official image expects its own specific env var names. `valueFrom.secretKeyRef` lets the container's env var name differ from the secret's key name, so one secret serves both consumers without duplicating credentials.
+- Every manifest (Secret, PVC, Deployment, Service) was given a matching `namespace: java-app`, with the namespace itself created as the first task in the deploying playbook, before anything namespaced   was applied.
+- Using the kubernetes.core.k8s and kubernetes.core.helm modules instead of shelling out to kubectl apply/helm install keeps the deploy idempotent and gives Ansible proper change-detection.
 
-### Namespace Consistency
+#### Verify Deployment
 
-Kubernetes Secrets and PersistentVolumeClaims are namespace-scoped — a Deployment can only reference a Secret or PVC that lives in its **own** namespace. Every manifest (Secret, PVC, Deployment, Service) was given a matching `namespace: java-app`, with the namespace itself created as the first task in the deploying playbook, before anything namespaced was applied.
+- **Cluster resources:** confirm the pods, services, and ingress are all running as expected.
 
-### Driving It All From Ansible
+![Verify cluster resources running](images/running_resources.png)
 
-Every manifest is applied through `kubernetes.core.k8s`, keeping `kubectl` entirely out of the developer-facing workflow:
+- **Browser access:** the app is reachable at the ingress controller's ALB address.
 
-```yaml
-- name: Create java app namespace
-  kubernetes.core.k8s:
-    name: java-app
-    api_version: v1
-    kind: Namespace
-    state: present
-    kubeconfig: "{{ kubeconfig }}"
+![App browser access](images/app_with_alb_address.png)
 
-- name: deploy mysql
-  kubernetes.core.k8s:
-    src: "{{ manifest_dir }}/mysql.yaml"
-    state: present
-    kubeconfig: "{{ kubeconfig }}"
-```
+- **Database connectivity:** exec into the MySQL pod to confirm the database, tables, and user privileges were created correctly.
+
+![Verify DB](images/db_info.png)
 
 </details>
 
 ---
 
 <details>
-<summary>Exercise 8: Deploy MySQL Chart in Kubernetes (Highly Available)</summary>
+<summary> Project 6: Deploying MySQL as a Helm Chart (High Availability)</summary>
 
 <br />
 
-With the single-replica MySQL Deployment working, the team's next concern was availability: a single MySQL pod is a single point of failure. The task was to replace it with a 3-replica MySQL deployment sourced from a Helm chart, driven by Ansible rather than a manual `helm install`.
+With the app running well on Kubernetes, the team's next concern was availability — a single MySQL pod is a single point of failure. The ask was to replace it with a 3-replica MySQL, deployed via Helm rather than hand-rolled manifests, using the same Ansible-driven workflow from Project 5.
 
-Ansible's `kubernetes.core.helm` module allows a chart to be installed, upgraded, or values-overridden the same way `kubernetes.core.k8s` handles raw manifests — keeping the "no kubectl/helm knowledge required" promise of the exercise intact even as the underlying implementation moved from hand-written YAML to a chart-managed StatefulSet.
+### Implementation
+
+This reuses the Project 5 playbook almost entirely — only the MySQL deployment step changes, from applying `mysql.yaml` directly to installing the Bitnami MySQL Helm chart:
+
+```yaml
+    - name: Deploy MySQL via Helm charts
+      kubernetes.core.helm:
+        name: mysql
+        chart_ref: bitnami/mysql
+        release_namespace: java-app
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ manifest_dir }}/helm-mysql-values.yaml"
+```
+
+- Using the Bitnami chart instead of a custom MySQL manifest hands off replication, failover, and persistent storage per-replica to a chart the community already maintains and hardens — the same reasoning as reaching for `geerlingguy.mysql` back in Project 4, just at the Kubernetes layer.
+- 3-replica config lives in `helm-mysql-values.yaml`, kept separate from the playbook so tuning the database doesn't mean touching Ansible code.
+- `kubernetes.core.helm` installs it the same idempotent, change-tracked way as the ingress controller in Project 5 — same benefit, applied to one more piece of the stack.
+
+> **Note:** The Helm chart's MySQL service has a different name than the old single-pod Deployment's. `applicationconfig.yaml`'s `DB_SERVER` value must be updated to match before redeploying the app — otherwise it keeps pointing at a service that no longer exists.
 
 </details>
 
@@ -1173,37 +1231,6 @@ Ansible's `kubernetes.core.helm` module allows a chart to be installed, upgraded
 
 <br />
 
-Automating this project end-to-end surfaced a long list of real, non-obvious problems — the kind that only show up once you actually run the thing against live infrastructure. Working through them is where most of the actual learning happened.
-
----
-
-### 1. Gradle Wrapper / Version Mismatch
-
-A fresh clone had no `gradlew` wrapper and the system-installed Gradle was version **4.4.1** — eight years old, and incompatible with the Spring Boot 3.5.5 project's plugins, producing a cryptic `NoSuchMethodError` on `TaskContainer.named()`. The fix was installing a modern Gradle via SDKMAN and generating a proper wrapper pinned to a compatible version (`gradle wrapper --gradle-version 8.14`), rather than relying on whatever Gradle happened to already be on the machine.
-
-> **Lesson learned:** Never assume the system's installed build tool version is close to current — pin and commit a wrapper.
-
----
-
-### 2. Maven Coordinate Changes
-
-`mysql-connector-j` version 9.x moved from the `mysql:` groupId to `com.mysql:` — a dependency written as `group: 'mysql', name: 'mysql-connector-j', version: '9.2.0'` silently resolved to nothing and failed the build with `Could not find mysql:mysql-connector-j:9.2.0`. The fix was updating to the current `com.mysql:mysql-connector-j:9.2.0` coordinate.
-
----
-
-### 3. Jenkins APT Signing Key Format
-
-Early attempts to add Jenkins' apt repository key failed with `NO_PUBKEY` errors, because the key was downloaded as ASCII-armored text and saved directly — but apt's `signed-by` option expects a binary keyring, not armored text. This was resolved with `curl | gpg --dearmor -o ...`. Later, following Jenkins' current official install instructions (year-versioned key URL, `/etc/apt/keyrings` path) turned out to work with a plain download and no dearmor step at all — a reminder that "correct" install instructions for third-party repositories change over time and are worth re-checking against the vendor's current docs rather than trusting a remembered process.
-
----
-
-### 4. SSH Key Pair Mismatch
-
-A server was launched with AWS key pair name `"jenkins"`, while the configuration playbook authenticated using a completely different local key file (`myapp-key-pair.pem`) — producing `Permission denied (publickey)`. Since a key pair is baked into an EC2 instance at launch time and can't be swapped on a running instance, the fix required correcting the `key_name` var and **relaunching** the affected servers, not just editing the connecting playbook.
-
-> **Lesson learned:** Keep `key_name` (the AWS-registered pair name) and the local `.pem` file path as a single source of truth across every playbook that touches the same servers — a mismatch here fails silently until the first SSH attempt.
-
----
 
 ### 5. `ansible_python_interpreter` Leaking Across `delegate_to`
 
@@ -1229,25 +1256,6 @@ The `geerlingguy.mysql` role's user-creation step failed with `(1524, "Plugin 'm
 
 A MySQL PersistentVolumeClaim sat in `Pending` indefinitely with `Waiting for a volume to be created either by the external provisioner 'ebs.csi.eks.amazonaws.com'...`. The Terraform EKS module's `addons` block simply never included `aws-ebs-csi-driver` — nothing was provisioning volumes at all. The fix required both adding the addon *and* wiring it to an IAM role via EKS Pod Identity (the modern replacement for the older OIDC/IRSA pattern), since the driver needs AWS permissions to actually create/attach EBS volumes on the cluster's behalf.
 
----
-
-### 9. Node Instance Type Too Small for Addon Pods
-
-After adding the EBS CSI driver, its status showed `DEGRADED` with `InsufficientNumberOfReplicas ... Too many pods`. `t3.micro` instances support a very low number of pods per node (an AWS-imposed limit based on available ENI secondary IPs) — with `kube-proxy`, `aws-node`, and other DaemonSets already claiming a slot on every node, there was no room left for the CSI driver's own per-node DaemonSet pods. Bumping the node group to `t3.small` resolved it. This is a distinct failure mode from *cluster*-level resource exhaustion — it's a hard per-node ceiling that more CPU/memory headroom elsewhere in the cluster can't work around.
-
----
-
-### 10. Confusing Two Incompatible Provisioning Tools
-
-An `eksctl` `ClusterConfig` YAML file was mistakenly assumed to be pasteable into a Terraform `.tf` file. They are two entirely separate tools with incompatible syntax and no shared state — `eksctl` is a standalone CLI that manages a cluster's lifecycle directly, while `terraform-aws-modules/eks` is an HCL module managed through Terraform's own plan/apply/state cycle. Where `eksctl`'s `attachPolicyARNs` shorthand auto-generates IRSA wiring behind the scenes, the Terraform equivalent needed to be written explicitly as an `aws_iam_role` + `pod_identity_association` — not "worse," just less automatically hidden.
-
----
-
-### 11. `terraform destroy` Blocked by Un-Tracked Kubernetes Resources
-
-A VPC deletion failed with `DependencyViolation: The vpc ... has dependencies and cannot be deleted`, despite Terraform believing it owned everything in the VPC. Kubernetes Services/Ingresses of type `LoadBalancer` create real AWS resources (ENIs, load balancers) directly via the cloud controller manager — entirely outside Terraform's state. Those resources have to be cleaned up (or the corresponding Kubernetes objects deleted first, letting Kubernetes tear down its own AWS-side resources) before Terraform can successfully remove the underlying VPC.
-
-> **Lesson learned:** Anything Kubernetes provisions dynamically in AWS (load balancers, in particular) is invisible to Terraform's state and needs to be torn down through Kubernetes first, in the correct order, during a full environment teardown.
 
 </details>
 
@@ -1255,6 +1263,4 @@ A VPC deletion failed with `DependencyViolation: The vpc ... has dependencies an
 
 ## Conclusion
 
-This project traced a full path from a single-server jar deployment to a highly-available, Helm-managed MySQL deployment running on Amazon EKS — with Ansible as the consistent automation layer throughout, regardless of how much the underlying infrastructure changed underneath it. Along the way, the project touched idempotent process management, private VPC networking with a jump-host pattern, reusing community Ansible roles instead of reinventing them, and the practical realities of Kubernetes storage provisioning on AWS (CSI drivers, Pod Identity, per-node pod limits).
 
-Nearly every real lesson here came from something breaking in a non-obvious way — a self-signaling `pkill`, a silently-changed MySQL default, a missing Terraform addon — and tracing each one back to its actual root cause rather than working around the symptom. That process, more than any individual playbook, is the transferable skill this project was really building.
