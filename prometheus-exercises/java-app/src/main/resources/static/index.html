@@ -45,10 +45,10 @@
 <script>
   // HOST must be the server IP or DNS name when app running on a server
   // and localhost when running locally
-  const HOST = "aad5c44e91d0a4408849b778198a2c4d-310330502.eu-north-1.elb.amazonaws.com";
+  const HOST = "localhost";
   
   (async function init() {
-    const response = await fetch(`http://${HOST}/get-data`);
+    const response = await fetch(`http://${HOST}:8080/get-data`);
     console.log("response", response);
     const data = await response.json();
     console.log("stringified data: " + JSON.stringify(data));
@@ -116,7 +116,7 @@
       });
     });
 
-    const response = await fetch(`http://${HOST}/update-roles`, {
+    const response = await fetch(`http://${HOST}:8080/update-roles`, {
       method: "POST",
       headers: {
         'Accept': 'application/json',
@@ -167,5 +167,7 @@
 </div>
 </body>
 </html>
+
+
 
 
