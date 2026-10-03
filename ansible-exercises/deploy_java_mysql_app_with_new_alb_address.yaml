@@ -51,14 +51,14 @@
     - name: Update host in ingress.yaml manifest
       ansible.builtin.replace:
         path: "{{ manifest_dir }}/ingress.yaml"
-        regexp: 'host: ".*"'
-        replace: 'host: "{{ alb_hostname }}"'
+        regexp: '(host:\s*).*'
+        replace: '\1"{{ alb_hostname }}"'
 
     - name: Update const HOST in index.html frontend file
       ansible.builtin.replace:
         path: "{{ docker_app_dir }}/src/main/resources/static/index.html"
         regexp: 'const HOST = ".*";'
-        replace: 'const HOST = "http://{{ alb_hostname }}";'
+        replace: 'const HOST = "{{ alb_hostname }}";'
 
     - name: Build Gradle project to package updated frontend JAR
       ansible.builtin.command: ./gradlew clean build
