@@ -1,6 +1,8 @@
 package com.example;
 
 import io.prometheus.metrics.exporter.httpserver.HTTPServer;
+import io.prometheus.metrics.instrumentation.jvm.JvmMetrics;
+import io.prometheus.metrics.simpleclient.bridge.SimpleclientCollector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.SpringApplication;
@@ -43,6 +45,14 @@ public class Application {
         }
 
         try {
+            // Expose the metrics registered with the old client (AppController's
+            // java_app_http_requests_total and java_app_inprogress_requests)
+            // through the new client's registry that the HTTP server serves.
+            SimpleclientCollector.builder().register();
+
+            // JVM metrics (memory, GC, threads) - optional, useful for Grafana.
+            JvmMetrics.builder().register();
+
             HTTPServer server = HTTPServer.builder().port(8081).buildAndStart();
         } catch (IOException e) {
             e.printStackTrace();

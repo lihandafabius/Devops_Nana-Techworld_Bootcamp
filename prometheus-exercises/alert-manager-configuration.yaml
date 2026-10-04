@@ -1,0 +1,45 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: java-app-alert-config
+  namespace: monitoring
+spec:
+  route:
+    receiver: 'email'          # default for anything not matched below
+    repeatInterval: 30m        # if the issue still persist send another email in 30 mins time
+    routes:
+    - receiver: 'slack'
+      matchers:
+      - name: alertname
+        value: 'JavaAppTooManyRequests|MysqlDown|MysqlTooManyConnections'
+        matchType: '=~'
+      repeatInterval: 30m
+    - receiver: 'email'
+      matchers:
+      - name: alertname
+        value: 'NginxHighHttp4xxRate|StatefulSetReplicasMismatch'
+        matchType: '=~'
+      repeatInterval: 30m
+
+  receivers:
+  - name: 'slack'
+    slackConfigs:
+    - apiURL:
+        name: slack-webhook
+        key: url
+      channel: 'all-dev-alerts'
+      sendResolved: true
+      title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+      text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ "\n" }}{{ .Annotations.description }}{{ "\n" }}{{ end }}'
+
+  - name: 'email'
+    emailConfigs:
+    - to: 'fabiuslihandaachevi@gmail.com'
+      from: 'fabiuslihandaachevi@gmail.com'
+      smarthost: 'smtp.gmail.com:587'
+      authUsername: 'fabiuslihandaachevi@gmail.com'
+      authIdentity: 'fabiuslihandaachevi@gmail.com'
+      authPassword:
+        name: gmail-auth
+        key: password
+      sendResolved: true

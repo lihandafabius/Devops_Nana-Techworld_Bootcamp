@@ -29,4 +29,6 @@ dependencies {
     implementation 'io.prometheus:prometheus-metrics-core:1.3.3'
     implementation 'io.prometheus:prometheus-metrics-exporter-httpserver:1.3.3'
     implementation 'io.prometheus:prometheus-metrics-instrumentation-jvm:1.3.3'
+    // Bridge: exposes metrics registered with the old simpleclient (AppController)
+    implementation 'io.prometheus:prometheus-metrics-simpleclient-bridge:1.3.3'
 }

@@ -28,6 +28,11 @@
         kubeconfig: "{{ kubeconfig }}"
         wait: true
         wait_timeout: 10m
+        values:
+          alertmanager:
+            alertmanagerSpec:
+              alertmanagerConfigMatcherStrategy:
+                type: None
 
     - name: Add NGINX Ingress Repository
       kubernetes.core.helm_repository:

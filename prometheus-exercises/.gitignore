@@ -5,3 +5,5 @@ out
 project-vars
 venv
 gradlew*
+email-secret.yaml
+slack-secret.yaml
