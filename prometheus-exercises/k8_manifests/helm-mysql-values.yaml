@@ -1,0 +1,39 @@
+architecture: replication
+
+primary:
+  persistence:
+    storageClass: gp2
+
+secondary:
+  replicaCount: 2
+
+  persistence:
+    storageClass: gp2
+
+auth:
+  username: myuser
+  password: mypassword
+  database: "appdb" # if you do not pass your db name the default will be my_database
+  rootPassword: rootpassword
+
+  replicationUser: replicator
+  replicationPassword: replica123
+
+global:
+  security:
+    allowInsecureImages: true
+
+image:
+  registry: docker.io
+  repository: bitnamilegacy/mysql
+  tag: latest
+
+metrics:
+  enabled: true
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/mysqld-exporter
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: monitoring

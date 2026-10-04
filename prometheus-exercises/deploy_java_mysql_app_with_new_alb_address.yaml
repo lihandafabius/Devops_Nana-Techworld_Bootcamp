@@ -1,0 +1,155 @@
+---
+- name: Deploy java mysql app to k8's cluster
+  hosts: localhost
+  vars_files:
+    - project-vars
+
+
+  tasks:
+    - name: Create java app namespace
+      kubernetes.core.k8s:
+        name: java-app
+        api_version: v1
+        kind: Namespace
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+
+    - name: Add Prometheus community Helm repository
+      kubernetes.core.helm_repository:
+        name: prometheus-community
+        repo_url: https://prometheus-community.github.io/helm-charts
+
+    - name: Deploy kube-prometheus-stack (Prometheus Operator)
+      kubernetes.core.helm:
+        name: monitoring
+        chart_ref: prometheus-community/kube-prometheus-stack
+        release_namespace: monitoring
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig }}"
+        wait: true
+        wait_timeout: 10m
+
+    - name: Add NGINX Ingress Repository
+      kubernetes.core.helm_repository:
+        name: ingress-nginx
+        repo_url: https://kubernetes.github.io/ingress-nginx
+
+    - name: Deploy NGINX Ingress Controller via Helm
+      kubernetes.core.helm:
+        name: ingress-nginx
+        chart_ref: ingress-nginx/ingress-nginx
+        release_namespace: ingress-nginx
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig }}"
+        values:
+          controller:
+            metrics:
+              enabled: true
+              serviceMonitor:
+                enabled: true
+                additionalLabels:
+                  release: monitoring
+
+    - name: Get NGINX Ingress LoadBalancer Hostname
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig }}"
+        kind: Service
+        name: ingress-nginx-controller
+        namespace: ingress-nginx
+      register: ingress_service
+      until: ingress_service.resources[0].status.loadBalancer.ingress[0].hostname is defined
+      retries: 20
+      delay: 5
+
+    - name: Set ALB Hostname Variable
+      ansible.builtin.set_fact:
+        alb_hostname: "{{ ingress_service.resources[0].status.loadBalancer.ingress[0].hostname }}"
+
+    - name: Update host in ingress.yaml manifest
+      ansible.builtin.replace:
+        path: "{{ manifest_dir }}/ingress.yaml"
+        regexp: '(host:\s*).*'
+        replace: '\1"{{ alb_hostname }}"'
+
+    - name: Update const HOST in index.html frontend file
+      ansible.builtin.replace:
+        path: "{{ docker_app_dir }}/src/main/resources/static/index.html"
+        regexp: 'const HOST = ".*";'
+        replace: 'const HOST = "{{ alb_hostname }}";'
+
+    - name: Build Gradle project to package updated frontend JAR
+      ansible.builtin.command: ./gradlew clean build
+      args:
+        chdir: "{{ docker_app_dir }}"
+
+    - name: Log in to Docker Hub
+      community.docker.docker_login:
+        username: "{{ docker_username }}"
+        password: "{{ docker_password }}"
+
+    - name: Build Docker image for Java App
+      community.docker.docker_image:
+        build:
+          path: "{{ docker_app_dir }}"
+        name: "{{ docker_image }}"
+        source: build
+        force_source: true
+
+    - name: Push Java App image to Docker Hub
+      community.docker.docker_image:
+        name: "{{ docker_image }}"
+        push: true
+        source: local
+
+    - name: Create Docker registry secret for image pull
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: my-registry-key
+            namespace: java-app
+          type: kubernetes.io/dockerconfigjson
+          stringData:
+            .dockerconfigjson: "{{ {'auths': {'https://index.docker.io/v1/': {'username': docker_username, 'password': docker_password, 'auth': (docker_username + ':' + docker_password) | b64encode}}} | to_json }}"
+
+    - name: Apply mysql secret
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/mysql_secret.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+
+    - name: Apply mysql configmap
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/applicationconfig.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+
+    - name: Deploy MySQL via Helm charts
+      kubernetes.core.helm:
+        name: mysql
+        chart_ref: bitnami/mysql
+        release_namespace: java-app
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ manifest_dir }}/helm-mysql-values.yaml"
+
+    - name: Deploy Java Application and Service
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/application-deployment.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+
+    - name: Apply Ingress rule for Java App
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/ingress.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+
+    # - name: Restart Java App deployment to pull fresh Docker image
+    #   ansible.builtin.command: >
+    #     kubectl rollout restart deployment/java-mysql-app
+    #     -n java-app
+    #     --kubeconfig="{{ kubeconfig }}"

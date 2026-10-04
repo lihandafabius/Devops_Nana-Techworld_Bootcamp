@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-mysql-app
+  namespace: java-app
+  labels:
+    app: java-mysql-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: java-mysql-app
+  template:
+    metadata:
+      labels:
+        app: java-mysql-app
+    spec:
+      imagePullSecrets:
+      - name: my-registry-key
+      containers:
+      - name: java-mysql-app
+        image: lihanda/demo-app:java-app-3.1
+        imagePullPolicy: Always
+
+        ports:
+        - containerPort: 8080
+
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "500Mi"
+            cpu: "1Gi"
+
+        env:
+        - name: DB_SERVER
+          valueFrom:
+            configMapKeyRef:
+              name: mysql-config
+              key: DB_SERVER
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: mysql-config
+              key: DB_NAME
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: DB_USER
+        - name: DB_PWD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: DB_PWD
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-mysql-app-service
+  namespace: java-app
+  labels:
+    app: java-mysql-app
+spec:
+  selector:
+    app: java-mysql-app
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  - name: metrics
+    port: 8081
+    targetPort: 8081
+  type: ClusterIP
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: java-mysql-app
+  namespace: java-app
+  labels:
+    release: monitoring
+    app: java-mysql-app
+spec:
+  endpoints:
+  - port: metrics
+    path: /metrics
+  namespaceSelector: # enables prometheus to discover it since it is in another ns
+    matchNames:
+    - java-app
+  selector:
+    matchLabels:
+      app: java-mysql-app
