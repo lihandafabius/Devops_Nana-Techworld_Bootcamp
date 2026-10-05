@@ -1242,30 +1242,72 @@ This reuses the Project 5 playbook almost entirely — only the MySQL deployment
 
 <br />
 
+### 1. Ansible privilege escalation permission error
 
-### 5. `ansible_python_interpreter` Leaking Across `delegate_to`
+This error occured whenever a playbook switches to running a task as a specific non-root user via become_user — for example, starting the Java application as become_user: "{{ firstname }}". Without the acl package installed first, that switch failed:
 
-A playbook running locally (via a Python virtualenv) used `delegate_to` to run tasks against a remote server. The play-level `ansible_python_interpreter` (pointing at the local venv) leaked through to the delegated host, causing Ansible to try running modules using a Python path that only existed on the operator's laptop. The first fix was explicitly overriding the interpreter in every delegated task's `vars:` block; the more durable fix was restructuring the playbook to use `add_host` + a proper second play, where connection details (including the interpreter) are set once and inherited automatically by every task — eliminating an entire class of "forgot to repeat this everywhere" bugs.
+![Permission Error](images/permissions_error.png)
+
+The cause: Ansible copies a small temp script to the target machine as the SSH login user (e.g. `ubuntu`), then needs to hand read access to that script to the new, unprivileged user. Without the `acl` package, it has no working mechanism to grant that narrow, scoped permission — it tries a BSD-style ACL syntax that doesn't exist on GNU/Linux `chmod`, that attempt fails, and the task dies before the application ever starts.
+
+The fix: install `acl` as one of the very first tasks, before any `become_user` step is reached:
+
+```yaml
+- name: Install Java
+  apt:
+    name:
+      - openjdk-17-jre-headless
+      - acl
+    state: present
+```
+
+Lesson learned: `become_user` is a handoff between two different Linux users, and that handoff depends on ACL support that isn't installed on a bare Ubuntu image by default — this only shows up with an unprivileged `become_user`, never with plain `become: yes` straight to root.
 
 ---
 
-### 6. `pkill -f` Self-Termination
+### 2. MySQL 8.4 Disabled `mysql_native_password` by Default
 
-`pkill -f <jar_name>` intermittently returned non-zero (`rc: -15`, later `rc: -9` with `-9`) even though it successfully stopped the target process. The cause: `pkill -f` matches against the **full command line**, including the shell invocation running the `pkill` command itself (which literally contains the jar name as text) — so it could match and signal its own parent shell. The fix was `failed_when: false` on every `pkill` task, with a separate `pgrep`-based confirmation step as the actual pass/fail gate, rather than trusting `pkill`'s own exit code.
+The `geerlingguy.mysql` role's user-creation step failed with `(1524, "Plugin 'mysql_native_password' is not loaded")`.
+
+![Plugin Error](images/plugin_error.png)
+
+MySQL 8.4 disabled that legacy authentication plugin by default (removed entirely in 9.0), but the role's underlying `mysql_user` module still defaulted new accounts to it.
+
+After hitting the error, I SSH'd into the DB server to investigate the role directly rather than guessing — checking the installed role's version, then grepping its own source for every reference to `mysql_native_password` and `mysql_config` to see how the role itself expected this to be configured, instead of relying on the README:
+
+![Error Fix](images/error_fix.png)
+
+This confirmed two things: the plugin reference only shows up in the role's `secure-installation.yml` task (not in user creation itself, where the actual failure was happening), and `mysql_config_include_files` — defaulted to an empty list — was the role's own built-in mechanism for dropping in extra config, already there and unused.
+
+Two fixes were explored: manually re-enabling the plugin via `lineinfile` on the role's generated config file after install (requiring a restart and manual user creation, bypassing the role's own step); and the more correct fix, using the role's own `mysql_config_include_files` mechanism to inject `mysql_native_password=ON` before MySQL's first startup — letting the role's normal user-creation flow succeed on the first pass, with no restart needed:
+
+```yaml
+pre_tasks:
+  - name: Create MySQL native_password override file on the control server
+    copy:
+      dest: "/home/ubuntu/mysql-native-password-override.cnf"
+      content: |
+        [mysqld]
+        mysql_native_password=ON
+    delegate_to: localhost
+    become: false
+
+vars:
+  mysql_config_include_files:
+    - src: "/home/ubuntu/mysql-native-password-override.cnf"
+```
+
+The override file is created in `pre_tasks` specifically because `pre_tasks` runs before `roles` in a play — the file has to exist before `geerlingguy.mysql` runs and copies it in via `mysql_config_include_files`, so MySQL picks up the setting on its very first startup with no restart needed.
 
 ---
 
-### 7. MySQL 8.4 Disabled `mysql_native_password` by Default
+### 3. `ansible_python_interpreter` Leaking Across `delegate_to`
 
-The `geerlingguy.mysql` role's user-creation step failed with `(1524, "Plugin 'mysql_native_password' is not loaded")`. MySQL 8.4 disabled that legacy authentication plugin by default (removed entirely in 9.0), but the role's underlying `mysql_user` module still defaulted new accounts to it. Two fixes were explored: manually re-enabling the plugin via `lineinfile` on the role's generated config file *after* install (requiring a restart and manual user creation, bypassing the role's own step); and the more correct fix, using the role's own `mysql_config_include_files` mechanism to inject `mysql_native_password=ON` **before** MySQL's first startup — letting the role's normal user-creation flow succeed on the first pass, with no restart needed.
+A playbook running locally (via a Python virtualenv) used `delegate_to` to run a task against a remote server. Ansible kept trying to run that task using the *local* machine's venv Python path — which doesn't exist on the remote server — and the task failed.
 
-> **Lesson learned:** A role's own error messages (down to which exact module argument failed) are often more reliable than a role's documented README, which can lag behind the actual code — `mysql_config_include_files` turned out to expect a list of dicts with a `src` key, not a list of plain path strings, discoverable only from the role's stack trace.
+The cause: `ansible_python_interpreter` is set once at the play level, on the assumption that every host shares the same Python. `delegate_to` runs a task on a different host without resetting that assumption, so the local interpreter path kept leaking into the remote task.
 
----
-
-### 8. Missing EBS CSI Driver Addon
-
-A MySQL PersistentVolumeClaim sat in `Pending` indefinitely with `Waiting for a volume to be created either by the external provisioner 'ebs.csi.eks.amazonaws.com'...`. The Terraform EKS module's `addons` block simply never included `aws-ebs-csi-driver` — nothing was provisioning volumes at all. The fix required both adding the addon *and* wiring it to an IAM role via EKS Pod Identity (the modern replacement for the older OIDC/IRSA pattern), since the driver needs AWS permissions to actually create/attach EBS volumes on the cluster's behalf.
+The fix first tried was overriding the interpreter manually in every delegated task — functional, but easy to forget on new tasks. The better fix was using `add_host` to register the remote server as its own host, then handling it in a proper second play, where the interpreter is set once for that host and applies automatically to every task in it.
 
 
 </details>
