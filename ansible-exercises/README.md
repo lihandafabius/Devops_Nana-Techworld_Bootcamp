@@ -1,22 +1,33 @@
-# 🤖 Automation with Ansible – Provisioning, Configuration and Kubernetes Deployment Pipelines
+<table>
+  <tr>
+    <td width="70" align="center" valign="middle">
+      <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/ansible/ansible-original.svg" width="55" height="55" alt="Ansible Logo" />
+    </td>
+    <td valign="middle">
+      <h1 style="border-bottom: none; margin: 0; padding: 0; line-height: 1.2;">Automation with Ansible</h1>
+      <span style="font-size: 15px; color: #57606a;">Provisioning, Configuration and Kubernetes Deployment Pipelines</span>
+    </td>
+  </tr>
+</table>
 
-Manual infrastructure work doesn't scale well, the same steps repeated across servers eventually drift apart, break under time pressure, or end up understood by only one person. Ansible solves this by letting infrastructure be defined once, as code: it's agentless (driving everything over plain SSH, no software required on target machines) and idempotent (running the same playbook twice produces the same safe result, not double the side effects), which means a deployment process can be version-controlled, reviewed, and handed to anyone to run with confidence.
+---
 
-This directory walks through eight projects that build on each other — starting with a single-command Java artifact deployment, moving through multi-server AWS provisioning with private networking, and finishing with a Kubernetes-based deployment pipeline — each one turning a manual process into something repeatable and automated end to end. Each project is framed around a real team's requirements, presented the way they'd actually reach a DevOps engineer: a specific pain point or ask from developers, translated here into an Ansible playbook that solves it.
+Manual infrastructure work doesn't scale well, the same steps repeated across servers eventually drift apart, break under time pressure, or end up understood by only one person. Ansible solves this by letting infrastructure be defined once, as code: it's **agentless** (driving everything over plain SSH, no software required on target machines) and **idempotent** (running the same playbook twice produces the same safe result, not double the side effects), which means a deployment process can be version-controlled, reviewed, and handed to anyone to run with confidence.
 
+This directory walks through **six real-world key projects that build on each other** — starting with a single-command Java artifact deployment, moving through multi-server AWS provisioning with private networking, and finishing with a Kubernetes-based deployment pipeline — each one turning a manual process into something repeatable and automated end to end. Each project is framed around a real team's requirements, presented the way they'd actually reach a DevOps engineer: a specific pain point or ask from developers, translated here into an Ansible playbook that solves it.
 
-## Project Objectives
+## Project objectives
 
 Across the projects, these were my main objectives to take after building the projects:
 
-- Build repeatable, version-controlled infrastructure workflows that reduce manual configuration and make deployments easier to reproduce and maintain.
-- Reduce deployment risk and configuration drift by replacing manual, error-prone infrastructure processes with consistent automated workflows.
-- Understand and apply **Ansible configuration management and automation best practices**, including reusable and idempotent playbooks.
-- Automate **application deployment, server configuration, and artifact management** across different environments.
-- Configure and manage **Ansible control nodes** while handling **OS and distribution differences** using conditionals, variables, and task inclusion.
-- Integrate Ansible with **AWS infrastructure**, including EC2 provisioning, networking, private subnets, and multi-server architectures.
-- Automate **Docker and Kubernetes deployments**, including containerized applications, persistent storage, Services, ConfigMaps, Secrets, Ingress, and Helm.
-- Develop practical **troubleshooting and infrastructure automation skills** across Linux, AWS, Ansible, Docker, and Kubernetes.
+* Build repeatable, version-controlled infrastructure workflows that reduce manual configuration and make deployments easier to reproduce and maintain.
+* Reduce deployment risk and configuration drift by replacing manual, error-prone infrastructure processes with consistent automated workflows.
+* Understand and apply **Ansible configuration management and automation best practices**, including reusable and idempotent playbooks.
+* Automate **application deployment, server configuration, and artifact management** across different environments.
+* Configure and manage **Ansible control nodes** while handling **OS and distribution differences** using conditionals, variables, and task inclusion.
+* Integrate Ansible with **AWS infrastructure**, including EC2 provisioning, networking, private subnets, and multi-server architectures.
+* Automate **Docker and Kubernetes deployments**, including containerized applications, persistent storage, Services, ConfigMaps, Secrets, Ingress, and Helm.
+* Develop practical **troubleshooting and infrastructure automation skills** across Linux, AWS, Ansible, Docker, and Kubernetes.
 
 ---
 
