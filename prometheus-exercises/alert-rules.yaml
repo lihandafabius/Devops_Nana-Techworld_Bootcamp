@@ -26,7 +26,7 @@ spec:
   - name: mysql.rules
     rules:
     - alert: MysqlDown
-      expr: sum(mysql_up) == 0
+      expr: sum(mysql_up) == 0 or absent(mysql_up)
       for: 0m
       labels:
         severity: critical
