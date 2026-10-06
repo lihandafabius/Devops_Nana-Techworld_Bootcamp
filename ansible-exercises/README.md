@@ -31,6 +31,7 @@ Across the projects, these were my main objectives to take after building the pr
 
 ---
 
+
 ## Project Structure
 
 ```
