@@ -31,6 +31,42 @@ Across the projects, these were my main objectives to take after building the pr
 
 ---
 
+## Project Structure
+
+```
+.
+├── ansible.cfg                                        # Ansible configuration
+├── project-vars                                        # Shared variables (AWS region, credentials, paths)
+├── hosts                                                # Static inventory
+├── images/                                              # Screenshots referenced throughout this README
+├── java-app/                                             # Gradle/Spring Boot source + Dockerfile for the Java app
+│
+├── deploy_java_artifact.yaml                            # Project 1 — build & deploy the Java artifact
+├── deploy_to_nexus.yaml                                 # Project 2 — push a built JAR to Nexus
+│
+├── create_ec2_and_install_run_jenkins.yaml              # Project 3 — provision EC2/Ubuntu for Jenkins
+├── start_jenkins_as_docker_container.yaml               # Project 3 — run Jenkins as a Docker container
+│
+├── provision_networking_infrastructure.yaml             # Project 4.1 — VPC, subnets, IGW, NAT gateway
+├── provision_servers.yaml                               # Project 4.2 — control plane, web, DB servers + security groups
+├── configure_ansible_server.yaml                        # Project 4.3 — configure control server, stage files, trigger deploy
+├── deploy_app_server_and_db.yaml                        # Project 4.4 — install MySQL (role) + deploy the Java app
+│
+├── deploy_java_mysql_app_to_k8s.yaml                    # Project 5 — build/push image, deploy to K8s cluster
+├── deploy_java_mysql_app_with_new_alb_address.yaml       # Project 5 — variant with ALB hostname lookup/templating
+├── deploy_java_app_mysql_with_helm.yaml                 # Project 6 — MySQL deployed via Bitnami Helm chart
+│
+└── k8_manifests/                                        # Kubernetes manifests applied by the Projects 5/6 playbooks
+    ├── application-deployment.yaml                      # Java app Deployment + Service
+    ├── applicationconfig.yaml                           # ConfigMap (DB_SERVER, DB_NAME)
+    ├── mysql.yaml                                       # MySQL Deployment + Service + PVC (Project 5, single replica)
+    ├── mysql_secret.yaml                                # MySQL credentials Secret
+    ├── helm-mysql-values.yaml                           # Bitnami MySQL chart values (Project 6, 3 replicas)
+    └── ingress.yaml                                     # Ingress rule for the Java app
+```
+
+---
+
 <details>
 <summary> Project 1: Build & Deploy Java Artifact</summary>
 
