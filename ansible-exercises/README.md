@@ -29,8 +29,6 @@ Across the projects, these were my main objectives to take after building the pr
 * Automate **Docker and Kubernetes deployments**, including containerized applications, persistent storage, Services, ConfigMaps, Secrets, Ingress, and Helm.
 * Develop practical **troubleshooting and infrastructure automation skills** across Linux, AWS, Ansible, Docker, and Kubernetes.
 
----
-
 
 ## Project Structure
 
