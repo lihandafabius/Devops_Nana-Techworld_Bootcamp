@@ -1357,7 +1357,7 @@ No single fix — mostly discipline: keep conditionals shallow, pull complex exp
 
 ## Conclusion
 
-Across these six projects, Ansible went from just a shortcut for repeated shell commands to the backbone of a full infrastructure workflow — provisioning, configuration, and Kubernetes deployment, all through version-controlled playbooks.
+Across these six projects, Ansible went from just a shortcut for repeated shell commands to the backbone of a full infrastructure workflow; Provisioning, configuration, and Kubernetes deployment, all through version-controlled playbooks.
 
 The biggest lesson was idempotency: unlike a Python script that just runs a list of actions, Ansible's modules check what already exists before doing anything. That's why `community.docker.docker_container` replaced a raw `docker run`, and `kubernetes.core.k8s`/`helm` replaced plain `kubectl`/`helm` commands — it's what makes a playbook safe to run again and again, not just convenient to run once.
 
