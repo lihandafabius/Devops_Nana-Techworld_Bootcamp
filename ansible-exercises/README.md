@@ -66,6 +66,31 @@ Across the projects, these were my main objectives to take after building the pr
 
 ---
 
+## Prerequisites
+
+The playbooks need a few Python libraries and Ansible collections installed on the machine running them. I used a Python virtual environment (`venv`) to keep these separate from system packages and avoid version conflicts, but you could also install them with `pip install --user` into your home directory.
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install ansible boto3 botocore docker kubernetes
+```
+
+- `boto3` / `botocore`: used by the AWS modules to talk to the AWS API
+- `docker`: used by the Docker modules to build images and run containers
+- `kubernetes`: used by the Kubernetes and Helm modules
+
+If you've already configured the AWS CLI (`aws configure`), the AWS modules pick up the same credentials automatically, so there's nothing extra to set up for `boto3`.
+
+**Ansible Galaxy** is Ansible's public hub for sharing reusable content: *collections* (bundles of modules) and *roles* (pre-built, reusable automation). The playbooks rely on these:
+
+```bash
+ansible-galaxy collection install amazon.aws community.docker kubernetes.core
+ansible-galaxy role install geerlingguy.mysql
+```
+
+---
+
 <details>
 <summary> Project 1: Build & Deploy Java Artifact</summary>
 
