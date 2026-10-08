@@ -138,9 +138,9 @@ secondary:
 
 auth:
   username: myuser
-  password: mypassword
+  password: ...
   database: "appdb"
-  rootPassword: rootpassword
+  rootPassword: ...
   replicationUser: replicator
   replicationPassword: replica123
 
