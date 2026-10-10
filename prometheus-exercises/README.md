@@ -4,7 +4,7 @@
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/prometheus/prometheus-original.svg" width="55" height="55" alt="Prometheus Logo" />
     </td>
     <td valign="middle">
-      <h1 style="border-bottom: none; margin: 0; padding: 0; line-height: 1.2;">Monitoring with Prometheus</h1>
+      <h1 style="border-bottom: none; margin: 0; padding: 0; line-height: 1.2;">Monitoring and Observability with Prometheus</h1>
       <span style="font-size: 15px; color: #57606a;">Metrics, Alerting and Notifications for a Java + MySQL Application on Kubernetes</span>
     </td>
   </tr>
@@ -584,8 +584,16 @@ Alerts that only show up in the Prometheus UI help nobody who is not looking at 
 ### Slack webhook
 
 1. Create a Slack workspace and a channel for the alerts.
-2. On `api.slack.com/apps` choose **Create New App → Blank app** (the AI agent and starter app templates are not needed).
+2. On `api.slack.com/apps` choose **Create New App → Blank app**.
+
+   ![Slack App](images/slack_app.png)
+
 3. Open **Incoming Webhooks**, switch them on, click **Add New Webhook to Workspace**, pick the channel and copy the URL.
+   
+   ![Add New webhook](images/webhook_url.png)
+
+   ![Add Channel](images/webhook_config.png)
+   
 4. Test it before involving Kubernetes:
 
 ```bash
@@ -593,6 +601,21 @@ curl -X POST -H 'Content-type: application/json' \
   --data '{"text":"Test message from Prometheus setup"}' \
   '<webhook-url>'
 ```
+![Test webhook](images/curl_ok_response.png)
+
+
+### Gmail app password
+
+Alertmanager sends the emails through Gmail's SMTP server. Gmail does not accept a normal account password for this, so an **app password** is created for Alertmanager to use instead.
+
+1. Sign in to the Google account that will send the alert emails.
+2. Turn on **2-Step Verification** under **Manage your Google Account → Security → 2-Step Verification**. App passwords are only available once it is on.
+3. Open **App passwords** (search for "App passwords" in the account settings), enter a name such as `alertmanager` and click **Create**.
+4. Copy the 16 character password that Google shows. It is displayed only once, and the spaces in it are not part of the password.
+5. Test it before involving Kubernetes, with an email sent through the same SMTP server.
+
+The app password is a credential, so it is stored in a Kubernetes Secret and never committed to the repository.
+
 
 ### Secrets
 
@@ -628,8 +651,8 @@ metadata:
   namespace: monitoring
 spec:
   route:
-    receiver: 'null'            # anything not matched below is discarded
-    repeatInterval: 30m
+    receiver: 'null'           # default: anything not matched below is discarded
+    repeatInterval: 30m        # if the issue still persists, notify again after 30 minutes
     routes:
     - receiver: 'slack'
       matchers:
@@ -651,7 +674,7 @@ spec:
     - apiURL:
         name: slack-webhook
         key: url
-      channel: '#dev-alerts'
+      channel: 'dev-alerts'
       sendResolved: true
       title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
       text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ "\n" }}{{ .Annotations.description }}{{ "\n" }}{{ end }}'
@@ -669,6 +692,8 @@ spec:
       sendResolved: true
 ```
 
+> **Note on the `null` receiver:** `null` is a receiver without any configuration, so it sends nothing. It is the default, which means every alert that matches neither route is discarded. `kube-prometheus-stack` ships many built-in alerts, such as `Watchdog`, which always fires on purpose, and `KubeControllerManagerDown` and `KubeSchedulerDown`, which are false alarms on Amazon EKS, where AWS manages the control plane. Without a `null` default they would flood the inbox and hide the real alerts. Discarded alerts still fire in Prometheus and show in the Alertmanager UI, they just send no notification.
+
 - **Routes** are checked from top to bottom and the first match wins. `matchType: '=~'` is a regex match, so one route covers several alert names.
 - **`repeatInterval`** is how long Alertmanager waits before notifying again while an alert is still firing.
 - **`sendResolved: true`** sends a second message when the problem clears.
@@ -676,7 +701,11 @@ spec:
 
 ### Required stack setting
 
-The Operator automatically adds a `namespace="monitoring"` matcher to every route of an `AlertmanagerConfig`. Alerts built from Kubernetes metrics carry the namespace of the object they describe, and the others carry no namespace at all, so none of them match and no notification is ever sent. The matching is switched off in the values of the `kube-prometheus-stack` task:
+By default, the Prometheus Operator only lets an `AlertmanagerConfig` handle alerts that carry the label `namespace="monitoring"`, the namespace the config lives in. This rule exists for shared clusters: it stops one team's config from catching, or interfering with, another team's alerts.
+
+The alerts in this project don't have that label (the Java and Nginx alerts have no namespace at all, and the StatefulSet alert has `namespace="java-app"`), so they fire in Prometheus but **no notification is ever sent**.
+
+On a single-team cluster this protection isn't needed, so it is switched off in the values of the `kube-prometheus-stack` task:
 
 ```yaml
         values:
@@ -686,35 +715,16 @@ The Operator automatically adds a `namespace="monitoring"` matcher to every rout
                 type: None
 ```
 
-### Playbook tasks
+The resources are applied with `kubectl`. The secrets go first, so they exist when the Alertmanager config loads, and the Operator's custom resource definitions have to be there already:
 
-The resources are applied at the end of the playbook, after the Operator's custom resource definitions exist and the secrets are in place:
-
-```yaml
-    - name: Apply Slack webhook secret
-      kubernetes.core.k8s:
-        src: "{{ manifest_dir }}/slack-secret.yaml"
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-
-    - name: Apply Gmail auth secret
-      kubernetes.core.k8s:
-        src: "{{ manifest_dir }}/email-secret.yaml"
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-
-    - name: Apply Prometheus alert rules
-      kubernetes.core.k8s:
-        src: "{{ manifest_dir }}/alert-rules.yaml"
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-
-    - name: Apply Alertmanager config (Slack and email routing)
-      kubernetes.core.k8s:
-        src: "{{ manifest_dir }}/alertmanager-config.yaml"
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
+```bash
+kubectl apply -f slack-secret.yaml
+kubectl apply -f email-secret.yaml
+kubectl apply -f alert-rules.yaml
+kubectl apply -f alert-manager-configuration.yaml
 ```
+
+![Secrets](images/secrets.png)
 
 #### Verify
 
@@ -724,7 +734,6 @@ kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-alertmanager 9
 
 On `http://localhost:9093` the **Status** page lists both receivers and the route tree, and firing alerts show the receiver they were routed to.
 
-![Alertmanager status](images/alertmanager_status.png)
 
 </details>
 
@@ -949,5 +958,12 @@ Once routing worked, emails started arriving for `KubeControllerManagerDown`, `K
           kubeProxy:
             enabled: false
 ```
+
+
+
+### 6. Flood of emails from built-in alerts
+
+Once the notifications worked, the inbox started receiving emails for alerts that were never configured: `Watchdog`, `KubeControllerManagerDown` and `KubeSchedulerDown`. They are default alerts of `kube-prometheus-stack` that were always firing, but had been filtered out until `alertmanagerConfigMatcherStrategy: None` was set. Every alert that matched neither route fell through to the default receiver, which was `email`. On Amazon EKS two of them can never be fixed, because AWS manages the control plane and does not expose those components to Prometheus.
+The fix was to make the default receiver a `null` receiver, defined without any configuration, so only the five alerts routed on purpose notify anyone. Lesson learned: the default receiver decides what happens to everything that was not planned for. If it is noisy, the real alerts get lost among false alarms.
 
 ---
