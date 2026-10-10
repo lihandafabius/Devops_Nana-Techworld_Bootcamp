@@ -12,11 +12,28 @@
 
 ---
 
-A Kubernetes cluster can look healthy and still be failing the people who use it. Without monitoring, a broken MySQL pod or a misbehaving Ingress is only discovered when a user contacts support or a developer sends an urgent email, and then the team spends hours troubleshooting inside the cluster to find the cause. **Prometheus** changes that: it continuously **scrapes metrics** from the cluster and its applications, evaluates **alert rules** against them, and hands firing alerts to **Alertmanager**, which notifies the right people through the right channel, so problems are seen immediately and can often be fixed before users are affected.
+**Monitoring** is the continuous collection and watching of data (metrics) from your systems, so you know whether they are healthy. **Observability** goes one step further: it is being able to understand *why* something is happening inside a system, using the data it produces.
+
+### Why monitoring and observability matter
+
+- **Visibility in dynamic environments:** containers constantly start, stop and move, which makes them much harder to keep track of than fixed servers.
+- **Visibility at every level:** with hundreds or thousands of containers, plus components across infrastructure, platform and application, you need one consistent view of all of them.
+- **No more black box:** without visibility, when something breaks you have no idea what is happening, what caused it or what is not working.
+- **Faster root cause analysis:** monitoring points directly at the cause of a problem, which saves a lot of time and effort, and with them a lot of money.
+- **Problems caught before they happen:** the people responsible for the infrastructure are alerted early instead of after users are affected.
+- **Early warning on resources:** notifications can fire when critical resources such as storage or memory cross a warning threshold (for example 50%). That gives the team time to plan capacity and request more, which often needs approval and justification, before anything actually runs out.
+
+### How Prometheus helps
+
+**Prometheus** is a widely used, open source monitoring tool with a large community, and it fits Kubernetes particularly well. It continuously **scrapes metrics** from the cluster and its applications, stores them as time series, evaluates **alert rules** against them, and hands firing alerts to **Alertmanager**, which notifies the right people through the right channel. **Grafana** sits on top to visualise the data.
+
+### What this project builds
 
 This project adds that visibility to an existing setup: a Java application backed by MySQL, exposed through an Nginx Ingress, running on Kubernetes. It is split into **five exercises that build on each other**: deploying the application, collecting metrics from every component, defining alerts, routing notifications to Slack and email, and finally simulating real failures to prove the whole chain works end to end. A Grafana dashboard sits on top to make the traffic visible.
 
 ## Project objectives
+
+Across the exercises, these were my main objectives:
 
 * Deploy the **Prometheus Operator** (`kube-prometheus-stack`) and understand how `ServiceMonitor`, `PrometheusRule` and `AlertmanagerConfig` custom resources drive it.
 * Collect metrics from three different sources: the **Nginx Ingress Controller** (built-in metrics), **MySQL** (a separate exporter) and a **custom Java application** (client library with its own metrics port).
@@ -33,12 +50,8 @@ This project adds that visibility to an existing setup: a Java application backe
 ├── project-vars                                          # Shared variables (kubeconfig, Docker Hub credentials, paths)
 ├── images/                                               # Screenshots referenced throughout this README
 ├── java-app/                                             # Spring Boot source + Dockerfile for the Java app
-│   ├── build.gradle                                      #   Gradle build (Prometheus client dependencies)
-│   └── src/main/java/com/example/
-│       ├── Application.java                              #   Starts the metrics server on port 8081
-│       └── AppController.java                            #   Request counter and in-progress gauge
 │
-├── deploy_java_mysql_app_with_new_alb_address.yaml       # Exercises 1-4 — one playbook that builds the whole stack
+├── deploy_java_mysql_app_with_new_alb_address.yaml       # One playbook that builds the whole stack
 ├── trigger-4xx.sh                                        # Exercise 5 — generates 404 traffic (Nginx alert)
 ├── trigger_javaapp_alert.sh                              # Exercise 5 — generates load on /get-data (Java alert)
 │
@@ -51,8 +64,7 @@ This project adds that visibility to an existing setup: a Java application backe
     ├── alert-rules.yaml                                  # Exercise 3 — PrometheusRule
     ├── alertmanager-config.yaml                          # Exercise 4 — AlertmanagerConfig (Slack + email routing)
     ├── slack-secret.yaml                                 # Slack webhook URL (not committed)
-    ├── email-secret.yaml                                 # Gmail app password (not committed)
-    └── grafana-dashboard.yaml                            # Grafana dashboard as a ConfigMap
+    └── email-secret.yaml                                 # Gmail app password (not committed)
 ```
 
 ---
@@ -72,10 +84,9 @@ Other requirements:
 
 - A running Kubernetes cluster (this project uses Amazon EKS) and its kubeconfig
 - `kubectl` and `helm` installed locally
-- Helm repositories used by the playbook: `prometheus-community`, `ingress-nginx` and `bitnami`
 - A Docker Hub account to push the Java app image
-- A **Slack** workspace with an incoming webhook (see Exercise 4)
-- A **Gmail app password** for the email notifications (a normal password will not work with SMTP)
+- A **Slack** workspace with an incoming webhook (set up in Exercise 4)
+- A **Gmail app password** for the email notifications (a normal password does not work with SMTP)
 
 > **Note:** the Slack webhook URL and the Gmail app password are credentials. `slack-secret.yaml` and `email-secret.yaml` are listed in `.gitignore` and are never committed. A leaked Slack webhook is also revoked automatically by Slack, which would silently stop the notifications.
 
