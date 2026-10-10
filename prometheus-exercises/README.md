@@ -108,7 +108,7 @@ The cluster itself was provisioned separately via Terraform (see [Terraform EKS 
  
 ### Implementation
  
-The setup for this exercise is deployed by a single Ansible playbook, adapted from the earlier ([Ansible project](https://github.com/lihandafabius/Devops_Nana-Techworld_Bootcamp/tree/main/ansible-exercises). 
+The setup for this exercise is deployed by a single Ansible playbook, adapted from the earlier [Ansible project](https://github.com/lihandafabius/Devops_Nana-Techworld_Bootcamp/tree/main/ansible-exercises). 
 
 It creates the namespace, deploys the ingress controller, builds and pushes the Java application image, and then deploys MySQL, the application and the Ingress rule:
  
@@ -267,7 +267,6 @@ This part is optional, since both values can also be edited by hand. Without the
 </details>
 
 ---
-
 <details>
 <summary> Exercise 2: Start Monitoring your Applications</summary>
 
@@ -279,15 +278,17 @@ The goal is to have Prometheus collect metrics from all three components. Everyt
 App  →  metrics endpoint  →  Service  →  ServiceMonitor (label matches)  →  Prometheus
 ```
 
+Third party applications such as MySQL usually need a separate **exporter** application that translates their internal statistics into Prometheus format. But some cloud native applications may have the metrics scraping configuration inside and may not require an additional exporter application, so it is worth checking whether an application's Helm chart already supports it before deploying one.
+
 | Application | Who exposes the metrics | How the ServiceMonitor is created |
 |---|---|---|
-| Nginx Ingress Controller | The controller itself (port 10254) | Helm values |
-| MySQL | A `mysqld-exporter` sidecar (port 9104) | Helm values (bundled in the Bitnami chart) |
-| Java application | The app itself, on port **8081** | Written by hand |
+| Nginx Ingress Controller | The controller itself (cloud native, no exporter needed) | Helm values |
+| MySQL | A `mysqld-exporter` container bundled in the Bitnami chart (port 9104) | Helm values |
+| Java application | The app itself, through the Prometheus Java client, on port **8081** | Written by hand |
 
 ### Deploy the Prometheus Operator
 
-The `kube-prometheus-stack` chart installs Prometheus, Alertmanager, Grafana, node-exporter, kube-state-metrics and the Operator with its custom resource definitions. The release name matters, because it is used as a label later:
+The [`kube-prometheus-stack`](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) chart, from the [prometheus-community Helm charts](https://github.com/prometheus-community/helm-charts) repository, installs Prometheus, Alertmanager, Grafana, node-exporter, kube-state-metrics and the Operator with its custom resource definitions. Two tasks are added to the playbook, one to add the chart repository and one to deploy the stack:
 
 ```yaml
     - name: Add Prometheus community Helm repository
@@ -304,15 +305,31 @@ The `kube-prometheus-stack` chart installs Prometheus, Alertmanager, Grafana, no
         kubeconfig: "{{ kubeconfig }}"
         wait: true
         wait_timeout: 10m
+        values:
+          alertmanager:
+            alertmanagerSpec:
+              alertmanagerConfigMatcherStrategy:
+                type: None
 ```
 
-> **Note:** by default Prometheus only picks up ServiceMonitors that carry the label `release: <helm release name>`, here `release: monitoring`. A ServiceMonitor without it exists but is silently ignored, which is the most common reason for a missing target.
+> **Notes:**
+> 1. **Automation:** the tasks are placed in the playbook for automation purposes, so the whole setup can be rebuilt with one command. The Prometheus Operator does not have to be deployed through Ansible: the same stack can be installed directly in the cluster with a single Helm command and the necessary options.
+> 2. **Placement:** these tasks go right after the namespace task, before the ingress controller. The `ServiceMonitor` resource type is created by the Operator, so it has to exist before the Nginx values, the MySQL values and the Java application manifest ask for one. `wait: true` makes Ansible hold until the stack is ready.
+> 3. **Release name:** it is used as a label later. By default Prometheus only picks up ServiceMonitors that carry `release: <helm release name>`, here `release: monitoring`. A ServiceMonitor without it exists but is silently ignored, which is the most common reason for a missing target.
+> 4. **`alertmanagerConfigMatcherStrategy`:** this setting is only needed for the notifications in Exercise 4 and is explained there.
 
 ### Nginx Ingress Controller
 
-The controller already exposes metrics, so only the flags are needed in the Helm values of the existing task:
+The ingress controller already exposes metrics, so no exporter is needed. The existing ingress controller task only needs the metrics flags in its Helm values, which also create the ServiceMonitor:
 
 ```yaml
+    - name: Deploy NGINX Ingress Controller via Helm
+      kubernetes.core.helm:
+        name: ingress-nginx
+        chart_ref: ingress-nginx/ingress-nginx
+        release_namespace: ingress-nginx
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig }}"
         values:
           controller:
             metrics:
@@ -325,7 +342,7 @@ The controller already exposes metrics, so only the flags are needed in the Helm
 
 ### MySQL
 
-MySQL cannot speak Prometheus on its own. The chart can add an exporter container next to each MySQL pod, which reads MySQL's internal statistics and republishes them in Prometheus format. The block below is added to `helm-mysql-values.yaml`:
+MySQL cannot speak Prometheus on its own, but the Bitnami chart already has the metrics configuration built in: when enabled, it adds a `mysqld-exporter` container next to each MySQL pod, which reads MySQL's internal statistics and republishes them in Prometheus format. The block below is added to [`helm-mysql-values.yaml`](k8_manifests/helm-mysql-values.yaml):
 
 ```yaml
 metrics:
@@ -343,7 +360,7 @@ Because of the extra exporter container, the MySQL pods change from `1/1` to `2/
 
 ### Java application
 
-The application registers its own metrics with the Prometheus Java client and serves them from a separate HTTP server on port **8081**. `AppController.java` defines two metrics:
+The Java application is monitored through the **Prometheus client libraries**. It registers its own metrics and serves them from a separate HTTP server on port **8081**, which is why the metrics are not on the application's normal port. `AppController.java` defines two metrics, a counter of all requests and a gauge of the requests currently in progress, and both are updated by the `/get-data` and `/update-roles` endpoints:
 
 ```java
 static final Counter totalRequests = Counter.build()
@@ -352,7 +369,25 @@ static final Gauge inprogressRequests = Gauge.build()
         .name("java_app_inprogress_requests").help("Inprogress requests.").register();
 ```
 
-Because the ServiceMonitor selects a Service *by labels* and a port *by name*, the Service of the Java application was extended with a label and a named metrics port. The ServiceMonitor is added to the same manifest:
+`Application.java` starts the metrics server on port 8081. The bridge line makes the metrics defined in `AppController` visible to that server (see Challenges):
+
+```java
+SimpleclientCollector.builder().register();
+JvmMetrics.builder().register();   // optional: memory, GC and thread metrics
+HTTPServer server = HTTPServer.builder().port(8081).buildAndStart();
+```
+
+The matching dependencies in `build.gradle` (excerpt):
+
+```gradle
+implementation 'io.prometheus:simpleclient:0.16.0'
+implementation 'io.prometheus:prometheus-metrics-core:1.3.3'
+implementation 'io.prometheus:prometheus-metrics-exporter-httpserver:1.3.3'
+implementation 'io.prometheus:prometheus-metrics-instrumentation-jvm:1.3.3'
+implementation 'io.prometheus:prometheus-metrics-simpleclient-bridge:1.3.3'
+```
+
+Because the ServiceMonitor selects a Service *by labels* and a port *by name*, the Service in [`application-deployment.yaml`](k8_manifests/application-deployment.yaml) was given a label and a named metrics port next to the application port:
 
 ```yaml
 apiVersion: v1
@@ -373,6 +408,11 @@ spec:
     port: 8081
     targetPort: 8081
   type: ClusterIP
+```
+
+The ServiceMonitor is added to the same manifest:
+
+```yaml
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -386,12 +426,15 @@ spec:
   endpoints:
   - port: metrics
     path: /metrics
+  namespaceSelector: # enables prometheus to discover it since it is in another ns
+    matchNames:
+    - java-app
   selector:
     matchLabels:
       app: java-mysql-app
 ```
 
-> **Note:** the path is `/metrics` on port **8081**. The root path `/` serves an HTML landing page, which Prometheus rejects with `received unsupported Content-Type "text/html"`.
+> **Note:** the metrics are on port **8081**, at the path `/metrics`. The root path `/` serves an HTML landing page, which Prometheus rejects with `received unsupported Content-Type "text/html"`.
 
 ### Verify in the Prometheus UI
 
