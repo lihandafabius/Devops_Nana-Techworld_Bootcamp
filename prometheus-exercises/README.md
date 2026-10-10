@@ -95,7 +95,8 @@ Other requirements:
 <details>
 <summary> Exercise 1: Deploy the Application and Prepare the Setup</summary>
 <br />
-The starting point is a setup that is already running: a Java application with 3 replicas talking to MySQL, reachable from a browser through an Nginx Ingress. The Kubernetes cluster itself was provisioned separately via Terraform (see [Terraform EKS project](https://github.com/lihandafabius/terraform-eks-infrastructure)) and the application is deployed with the playbook from the earlier Ansible project, adjusted for this exercise.
+The starting point is a setup that is already running: a Java application with 3 replicas talking to MySQL, reachable from a browser through an Nginx Ingress. 
+The cluster itself was provisioned separately via Terraform (see [Terraform EKS project](https://github.com/lihandafabius/terraform-eks-infrastructure)). 
  
 | Component | Deployment | Detail |
 |---|---|---|
