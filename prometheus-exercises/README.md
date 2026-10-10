@@ -4,7 +4,7 @@
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/prometheus/prometheus-original.svg" width="55" height="55" alt="Prometheus Logo" />
     </td>
     <td valign="middle">
-      <h1 style="border-bottom: none; margin: 0; padding: 0; line-height: 1.2;">Monitoring and Observability with Prometheus</h1>
+      <h1 style="border-bottom: none; margin: 0; padding: 0; line-height: 1.2;">Monitoring with Prometheus</h1>
       <span style="font-size: 15px; color: #57606a;">Metrics, Alerting and Notifications for a Java + MySQL Application on Kubernetes</span>
     </td>
   </tr>
@@ -272,7 +272,7 @@ This part is optional, since both values can also be edited by hand. Without the
 
 <br />
 
-The goal is to have Prometheus collect metrics from all three components. Everything revolves around one idea: the **Prometheus Operator** watches the cluster for `ServiceMonitor` objects, and each one tells Prometheus *which Service to scrape, on which port and path*.
+The goal is to have Prometheus collect metrics from all three components. Everything revolves around one idea: the **Prometheus Operator** watches the cluster for `ServiceMonitor` objects, and each one tells Prometheus *which Service to scrape, on which port and path*. Prometheus operator let's us create custom k8's components defined by Custom Resource Definitions (CRD's)
 
 ```
 App  →  metrics endpoint  →  Service  →  ServiceMonitor (label matches)  →  Prometheus
@@ -535,7 +535,9 @@ spec:
 
 ### How the rules work
 
-Each rule has an `expr` (a PromQL query), a `for` duration, `labels` and `annotations`. An alert moves through three states:
+Each rule has an `expr` (a PromQL query), a `for` duration, `labels` and `annotations`. The `for` causes prometheus to wait for a certain duration to see if the application could resolve itself before firing the alert, `labels` allow a custom set of additional labels to be attached to an alert, and finally `annotations` specify a set of informational labels for longer additional information.
+
+An alert moves through three states:
 
 ```
 condition false           → Inactive
@@ -549,7 +551,8 @@ still true after `for`    → Firing   (sent to Alertmanager)
 - **Java requests:** `rate()` of the application's own counter, summed over all 3 replicas so the threshold applies to the whole application.
 - **StatefulSet mismatch:** both metrics come from kube-state-metrics, which the stack installs. Since MySQL runs as a StatefulSet, a lost replica triggers it.
 
-The `severity` label does not change how Prometheus behaves. It is a tag that Alertmanager can use for routing. The commented `runbook_url` lines are placeholders for links to runbook pages that describe the fix for each alert.
+The `severity` label does not change how Prometheus behaves. It is a tag that Alertmanager can use for routing. 
+>`runbook_url` can be added to the annotations part to  provide a list of links for a probable solution fix for an issue, this makes it easy to access documentation for a particular issue. This could be a repository wiki page in common wiki platforms; Github, gitlab, confluence, notion, etc.
 
 #### Verify
 
