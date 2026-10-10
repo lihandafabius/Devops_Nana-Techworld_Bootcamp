@@ -489,7 +489,6 @@ spec:
       annotations:
         summary: "Too many 4xx errors on nginx-ingress"
         description: "{{ $value | printf \"%.1f\" }}% of HTTP requests returned 4xx\n Value = {{ $value }}"
-        # runbook_url: "https://wiki.yourdomain.com/runbooks/nginx-high-4xx-rate"
 
   - name: mysql.rules
     rules:
@@ -501,7 +500,6 @@ spec:
       annotations:
         summary: "MySQL down (all instances)"
         description: "No MySQL instance is up\n Value = {{ $value }}"
-        # runbook_url: "https://wiki.yourdomain.com/runbooks/mysql-down"
 
     - alert: MysqlTooManyConnections
       expr: mysql_global_status_threads_connected / mysql_global_variables_max_connections * 100 > 80
@@ -511,7 +509,6 @@ spec:
       annotations:
         summary: "MySQL too many connections (instance {{ $labels.instance }})"
         description: "{{ $value | printf \"%.0f\" }}% of max connections used\n LABELS = {{ $labels }}"
-        # runbook_url: "https://wiki.yourdomain.com/runbooks/mysql-too-many-connections"
 
   - name: java-app.rules
     rules:
@@ -523,7 +520,6 @@ spec:
       annotations:
         summary: "Java application receiving too many requests"
         description: "Request rate is {{ $value | printf \"%.1f\" }} per second\n Value = {{ $value }}"
-        # runbook_url: "https://wiki.yourdomain.com/runbooks/java-app-too-many-requests"
 
   - name: kubernetes.rules
     rules:
@@ -535,7 +531,6 @@ spec:
       annotations:
         summary: "StatefulSet {{ $labels.statefulset }} has unready replicas"
         description: "Namespace {{ $labels.namespace }}\n Value = {{ $value }}"
-        # runbook_url: "https://wiki.yourdomain.com/runbooks/statefulset-replicas-mismatch"
 ```
 
 ### How the rules work
