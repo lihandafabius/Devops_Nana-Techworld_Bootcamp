@@ -369,7 +369,7 @@ static final Gauge inprogressRequests = Gauge.build()
         .name("java_app_inprogress_requests").help("Inprogress requests.").register();
 ```
 
-`Application.java` starts the metrics server on port 8081. The bridge line makes the metrics defined in `AppController` visible to that server (see Challenges):
+`Application.java` starts the metrics server on port 8081. The bridge line makes the metrics defined in `AppController` visible to that server:
 
 ```java
 SimpleclientCollector.builder().register();
@@ -442,15 +442,7 @@ spec:
 kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090
 ```
 
-Under **Status → Targets** all three applications must show as **UP**:
-
-- `serviceMonitor/ingress-nginx/ingress-nginx-controller/0`
-- `serviceMonitor/java-app/mysql/...`
-- `serviceMonitor/java-app/java-mysql-app/0` (3 endpoints, one per replica)
-
-![Prometheus targets](images/prometheus_targets.png)
-
-> **Note:** a target showing **UP** only means the scrape succeeded, not that metrics were collected. The column `scrape_samples_scraped` shows how many samples each target really returned. This difference mattered for the Java application (see Challenges).
+![Prometheus targets](images/application_metrics.png)
 
 </details>
 
