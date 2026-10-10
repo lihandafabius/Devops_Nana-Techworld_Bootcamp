@@ -87,7 +87,7 @@ Other requirements:
 - A running Kubernetes cluster (this project uses Amazon EKS) and its kubeconfig
 - `kubectl` and `helm` installed locally
 - A Docker Hub account to push the Java app image
-- A **Slack** workspace with an incoming webhook (set up in Exercise 4)
+- A **Slack** workspace with an incoming webhook 
 - A **Gmail app password** for the email notifications (a normal password does not work with SMTP)
 
 ---
