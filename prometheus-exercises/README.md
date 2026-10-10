@@ -96,23 +96,51 @@ Other requirements:
 
 <details>
 <summary> Exercise 1: Deploy the Application and Prepare the Setup</summary>
-
 <br />
-
-The starting point is a setup that is already running: a Java application with 3 replicas talking to MySQL, reachable from a browser through an Nginx Ingress. The Kubernetes cluster itself was provisioned separately with Terraform, and the application is deployed with the playbook from the earlier Ansible project, adjusted for this exercise.
-
+The starting point is a setup that is already running: a Java application with 3 replicas talking to MySQL, reachable from a browser through an Nginx Ingress. The Kubernetes cluster itself was provisioned separately via Terraform (see [Terraform EKS project](https://github.com/lihandafabius/terraform-eks-infrastructure)), and the application is deployed with the playbook from the earlier Ansible project, adjusted for this exercise.
+ 
 | Component | Deployment | Detail |
 |---|---|---|
 | Java application | Deployment + Service | 3 replicas, image pushed to Docker Hub |
 | MySQL | Bitnami Helm chart | `architecture: replication`, 1 primary and 2 secondary replicas |
 | Ingress controller | `ingress-nginx` Helm chart | Exposed through an AWS load balancer |
 | Ingress rule | `ingress.yaml` | Routes the load balancer hostname to the Java service |
-
+ 
 ### Implementation
-
-The playbook creates the namespace, deploys the ingress controller, then reads the load balancer hostname and writes it into the Ingress manifest and the application's frontend before building the image:
-
+ 
+The setup for this exercise is deployed by a single Ansible playbook, adapted from the earlier Ansible project. It creates the namespace, deploys the ingress controller, builds and pushes the Java application image, and then deploys MySQL, the application and the Ingress rule:
+ 
 ```yaml
+---
+- name: Deploy java mysql app to k8's cluster
+  hosts: localhost
+  vars_files:
+    - project-vars
+ 
+ 
+  tasks:
+    - name: Create java app namespace
+      kubernetes.core.k8s:
+        name: java-app
+        api_version: v1
+        kind: Namespace
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+ 
+    - name: Add NGINX Ingress Repository
+      kubernetes.core.helm_repository:
+        name: ingress-nginx
+        repo_url: https://kubernetes.github.io/ingress-nginx
+ 
+    - name: Deploy NGINX Ingress Controller via Helm
+      kubernetes.core.helm:
+        name: ingress-nginx
+        chart_ref: ingress-nginx/ingress-nginx
+        release_namespace: ingress-nginx
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig }}"
+ 
+    # ---- Optional: automatic ALB address update ----
     - name: Get NGINX Ingress LoadBalancer Hostname
       kubernetes.core.k8s_info:
         kubeconfig: "{{ kubeconfig }}"
@@ -123,65 +151,125 @@ The playbook creates the namespace, deploys the ingress controller, then reads t
       until: ingress_service.resources[0].status.loadBalancer.ingress[0].hostname is defined
       retries: 20
       delay: 5
-
+ 
     - name: Set ALB Hostname Variable
       ansible.builtin.set_fact:
         alb_hostname: "{{ ingress_service.resources[0].status.loadBalancer.ingress[0].hostname }}"
-
+ 
     - name: Update host in ingress.yaml manifest
       ansible.builtin.replace:
         path: "{{ manifest_dir }}/ingress.yaml"
         regexp: '(host:\s*).*'
         replace: '\1"{{ alb_hostname }}"'
+ 
+    - name: Update const HOST in index.html frontend file
+      ansible.builtin.replace:
+        path: "{{ docker_app_dir }}/src/main/resources/static/index.html"
+        regexp: 'const HOST = ".*";'
+        replace: 'const HOST = "{{ alb_hostname }}";'
+    # ---- End of optional ALB address update ----
+ 
+    - name: Build Gradle project to package updated frontend JAR
+      ansible.builtin.command: ./gradlew clean build
+      args:
+        chdir: "{{ docker_app_dir }}"
+ 
+    - name: Log in to Docker Hub
+      community.docker.docker_login:
+        username: "{{ docker_username }}"
+        password: "{{ docker_password }}"
+ 
+    - name: Build Docker image for Java App
+      community.docker.docker_image:
+        build:
+          path: "{{ docker_app_dir }}"
+        name: "{{ docker_image }}"
+        source: build
+        force_source: true
+ 
+    - name: Push Java App image to Docker Hub
+      community.docker.docker_image:
+        name: "{{ docker_image }}"
+        push: true
+        source: local
+ 
+    - name: Create Docker registry secret for image pull
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: my-registry-key
+            namespace: java-app
+          type: kubernetes.io/dockerconfigjson
+          stringData:
+            .dockerconfigjson: "{{ {'auths': {'https://index.docker.io/v1/': {'username': docker_username, 'password': docker_password, 'auth': (docker_username + ':' + docker_password) | b64encode}}} | to_json }}"
+ 
+    - name: Apply mysql secret
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/mysql_secret.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+ 
+    - name: Apply mysql configmap
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/applicationconfig.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+ 
+    - name: Deploy MySQL via Helm charts
+      kubernetes.core.helm:
+        name: mysql
+        chart_ref: bitnami/mysql
+        release_namespace: java-app
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ manifest_dir }}/helm-mysql-values.yaml"
+ 
+    - name: Deploy Java Application and Service
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/application-deployment.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+ 
+    - name: Apply Ingress rule for Java App
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/ingress.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+ 
+    # - name: Restart Java App deployment to pull fresh Docker image
+    #   ansible.builtin.command: >
+    #     kubectl rollout restart deployment/java-mysql-app
+    #     -n java-app
+    #     --kubeconfig="{{ kubeconfig }}"
 ```
+ 
+> **Note:** the monitoring tasks are intentionally left out of this version of the playbook: the Prometheus Operator installation and the metrics settings of the ingress controller (Exercise 2), and the Alertmanager settings (Exercise 4). They are covered in their own sections and can either be added to this playbook later or run separately from a separate playbook file.
+ 
+The manifests and values applied by the playbook are in the [`k8_manifests`](k8_manifests) folder:
+ 
+- [`application-deployment.yaml`](k8_manifests/application-deployment.yaml): Java application Deployment (3 replicas) and Service
+- [`applicationconfig.yaml`](k8_manifests/applicationconfig.yaml): ConfigMap with the database connection details
+- [`mysql_secret.yaml`](k8_manifests/mysql_secret.yaml): MySQL credentials Secret
+- [`helm-mysql-values.yaml`](k8_manifests/helm-mysql-values.yaml): Bitnami MySQL chart values (replication with 1 primary and 2 secondary replicas)
+- [`ingress.yaml`](k8_manifests/ingress.yaml): Ingress rule for the Java application
 
-MySQL is deployed with the Bitnami chart, configured through `helm-mysql-values.yaml`:
-
-```yaml
-architecture: replication
-
-primary:
-  persistence:
-    storageClass: gp2
-
-secondary:
-  replicaCount: 2
-  persistence:
-    storageClass: gp2
-
-auth:
-  username: myuser
-  password: ...
-  database: "appdb"
-  rootPassword: ...
-  replicationUser: replicator
-  replicationPassword: replica123
-
-global:
-  security:
-    allowInsecureImages: true
-
-image:
-  registry: docker.io
-  repository: bitnamilegacy/mysql
-  tag: latest
-```
-
-> **Note on the images:** since August 2025 Bitnami only offers a limited set of free images, so the chart is pointed at the `bitnamilegacy` repository and `allowInsecureImages` is enabled. These legacy images receive no security updates. That is acceptable for a learning project but should be replaced with maintained images in production.
-
-#### Verify the setup
-
-```bash
-kubectl get pods -n java-app
-kubectl get ingress -n java-app
-```
-
-![Running resources](images/running_resources.png)
-
-![App through the ingress](images/app_with_alb_address.png)
-
+### Optional automation: the ALB address
+ 
+The AWS load balancer only gets its hostname once the ingress controller exists, so that hostname cannot be written into any file beforehand. Four optional tasks, marked with comments in the playbook, remove this manual step. After the ingress controller is deployed, the playbook reads the hostname from the `ingress-nginx-controller` Service, waiting until AWS has assigned it, and then uses it in two places:
+ 
+- **The Ingress rule:** the `host` field of `ingress.yaml` is replaced with the new hostname, so the rule always matches the current load balancer.
+- **The Java application:** the `const HOST` value in the frontend's `index.html` is replaced as well. The application is then rebuilt with Gradle and packaged into a fresh Docker image, so the frontend calls the correct address.
+This part is optional, since both values can also be edited by hand. Without these tasks, every rebuild of the cluster, which produces a new load balancer hostname, would need two manual edits before the application worked.
+ 
+![Running resources](images/cluster_resources.png)
+ 
+![App through the ingress](images/app.png)
+ 
 </details>
-
 ---
 
 <details>
