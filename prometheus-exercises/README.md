@@ -47,24 +47,26 @@ Across the exercises, these were my main objectives:
 
 ```
 .
-├── project-vars                                          # Shared variables (kubeconfig, Docker Hub credentials, paths)
-├── images/                                               # Screenshots referenced throughout this README
-├── java-app/                                             # Spring Boot source + Dockerfile for the Java app
+├── project-vars                                         # Shared variables (kubeconfig, Docker Hub credentials, paths)
+├── images/                                              # Screenshots referenced throughout this README
+├── java-app/                                            # Gradle/Spring Boot source + Dockerfile for the Java app
 │
-├── deploy_java_mysql_app_with_new_alb_address.yaml       # One playbook that builds the whole stack
-├── trigger-4xx.sh                                        # Exercise 5 — generates 404 traffic (Nginx alert)
-├── trigger_javaapp_alert.sh                              # Exercise 5 — generates load on /get-data (Java alert)
+├── deploy_java_mysql_app_with_new_alb_address.yaml      # Exercises 1-4 — one playbook that builds the whole stack
 │
-└── k8_manifests/                                         # Manifests applied by the playbook
-    ├── application-deployment.yaml                       # Java app Deployment + Service + ServiceMonitor
-    ├── applicationconfig.yaml                            # ConfigMap (DB_SERVER, DB_NAME)
-    ├── mysql_secret.yaml                                 # MySQL credentials Secret
-    ├── helm-mysql-values.yaml                            # Bitnami MySQL chart values (replication + metrics)
-    ├── ingress.yaml                                      # Ingress rule for the Java app
-    ├── alert-rules.yaml                                  # Exercise 3 — PrometheusRule
-    ├── alertmanager-config.yaml                          # Exercise 4 — AlertmanagerConfig (Slack + email routing)
-    ├── slack-secret.yaml                                 # Slack webhook URL (not committed)
-    └── email-secret.yaml                                 # Gmail app password (not committed)
+├── alert-rules.yaml                                     # Exercise 3 — PrometheusRule (5 alert rules)
+├── alert-manager-configuration.yaml                     # Exercise 4 — AlertmanagerConfig (Slack + email routing)
+├── slack-secret.yaml                                    # Exercise 4 — Slack webhook URL (not committed)
+├── email-secret.yaml                                    # Exercise 4 — Gmail app password (not committed)
+│
+├── trigger_javaapp_alert.sh                             # Exercise 5 — load on /get-data (Java alert, Slack)
+├── trigger_nginx_alert.sh                               # Exercise 5 — requests to a missing path (Nginx 4xx alert, email)
+│
+└── k8_manifests/                                        # Kubernetes manifests applied by the playbook
+    ├── application-deployment.yaml                      # Java app Deployment + Service + ServiceMonitor
+    ├── applicationconfig.yaml                           # ConfigMap (DB_SERVER, DB_NAME)
+    ├── mysql_secret.yaml                                # MySQL credentials Secret
+    ├── helm-mysql-values.yaml                           # Bitnami MySQL chart values (replication + metrics)
+    └── ingress.yaml                                     # Ingress rule for the Java app
 ```
 
 ---
