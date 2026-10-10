@@ -4,7 +4,7 @@
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/prometheus/prometheus-original.svg" width="55" height="55" alt="Prometheus Logo" />
     </td>
     <td valign="middle">
-      <h1 style="border-bottom: none; margin: 0; padding: 0; line-height: 1.2;">Monitoring with Prometheus</h1>
+      <h1 style="border-bottom: none; margin: 0; padding: 0; line-height: 1.2;">Monitoring and Observability with Prometheus</h1>
       <span style="font-size: 15px; color: #57606a;">Metrics, Alerting and Notifications for a Java + MySQL Application on Kubernetes</span>
     </td>
   </tr>
@@ -89,8 +89,6 @@ Other requirements:
 - A Docker Hub account to push the Java app image
 - A **Slack** workspace with an incoming webhook (set up in Exercise 4)
 - A **Gmail app password** for the email notifications (a normal password does not work with SMTP)
-
-> **Note:** the Slack webhook URL and the Gmail app password are credentials. `slack-secret.yaml` and `email-secret.yaml` are listed in `.gitignore` and are never committed. A leaked Slack webhook is also revoked automatically by Slack, which would silently stop the notifications.
 
 ---
 
@@ -239,17 +237,10 @@ The setup for this exercise is deployed by a single Ansible playbook, adapted fr
         src: "{{ manifest_dir }}/ingress.yaml"
         state: present
         kubeconfig: "{{ kubeconfig }}"
- 
-    # - name: Restart Java App deployment to pull fresh Docker image
-    #   ansible.builtin.command: >
-    #     kubectl rollout restart deployment/java-mysql-app
-    #     -n java-app
-    #     --kubeconfig="{{ kubeconfig }}"
+
 ```
  
-> **Note:** the monitoring tasks are intentionally left out of this version of the playbook: the Prometheus Operator installation and the metrics settings of the ingress controller (Exercise 2), and the Alertmanager settings (Exercise 4). They are covered in their own sections and can either be added to this playbook later or run separately from a separate playbook file.
- 
-The manifests and values applied by the playbook are in the [`k8_manifests`](k8_manifests) folder:
+The manifests and values applied by the playbook can be found in [`k8_manifests`](k8_manifests):
  
 - [`application-deployment.yaml`](k8_manifests/application-deployment.yaml): Java application Deployment (3 replicas) and Service
 - [`applicationconfig.yaml`](k8_manifests/applicationconfig.yaml): ConfigMap with the database connection details
