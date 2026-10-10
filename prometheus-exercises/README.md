@@ -261,6 +261,7 @@ This part is optional, since both values can also be edited by hand. Without the
 ![App through the ingress](images/app.png)
  
 </details>
+
 ---
 
 <details>
