@@ -108,7 +108,9 @@ The cluster itself was provisioned separately via Terraform (see [Terraform EKS 
  
 ### Implementation
  
-The setup for this exercise is deployed by a single Ansible playbook, adapted from the earlier Ansible project. It creates the namespace, deploys the ingress controller, builds and pushes the Java application image, and then deploys MySQL, the application and the Ingress rule:
+The setup for this exercise is deployed by a single Ansible playbook, adapted from the earlier ([Ansible project](https://github.com/lihandafabius/Devops_Nana-Techworld_Bootcamp/tree/main/ansible-exercises). 
+
+It creates the namespace, deploys the ingress controller, builds and pushes the Java application image, and then deploys MySQL, the application and the Ingress rule:
  
 ```yaml
 ---
