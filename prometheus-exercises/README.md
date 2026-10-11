@@ -755,7 +755,13 @@ A configuration that has never fired is only a guess. This exercise simulates re
 
 ```bash
 #!/usr/bin/env bash
-# Usage: ./trigger_javaapp_alert.sh <ingress-hostname> [total-requests] [parallel]
+# Triggers the JavaAppTooManyRequests alert by sending parallel requests to /get-data.
+#
+# Usage:   ./trigger_javaapp_alert.sh <ingress-hostname> [total-requests] [parallel]
+# Example: ./trigger_javaapp_alert.sh my-alb.elb.amazonaws.com 6000 20
+#
+# The alert fires when sum(rate(java_app_http_requests_total[1m])) > 10
+# for 1 minute. If the rate stays below 10, raise [parallel] (e.g. 50).
 
 HOST=$1
 TOTAL=${2:-6000}
@@ -771,11 +777,28 @@ seq 1 "$TOTAL" | xargs -P "$PARALLEL" -I{} curl -s -o /dev/null "http://$HOST/ge
 echo "Done."
 ```
 
-Only calls to `/get-data` and `/update-roles` increment the application's counter, so a request to any other path does not move this alert. The request rate reached about 58 requests per second, far above the threshold of 10.
+Only calls to `/get-data` and `/update-roles` increment the application's counter, so a request to any other path does not move this alert. The request rate reached about 52 requests per second, far above the threshold of 10.
 
-![Java alert firing in Prometheus](images/java_alert_firing.png)
+The script is run with the hostname of the load balancer, and it sends the requests in parallel:
 
-![Slack notification](images/slack_notification.png)
+![Trigger java alert](images/test_java_app_command.png)
+
+Within a minute the request rate is above the threshold, and the alert goes to **Pending** in Prometheus. The condition is true, but the alert has to stay true for the full `for: 1m` before it fires:
+
+![Pending Java alert](images/pending_java_app+alert.png)
+
+Once the minute has passed, the alert is **Firing** and Prometheus hands it to Alertmanager:
+
+![Java alert firing in Prometheus](images/app_firing.png)
+
+About 30 seconds later, the notification arrives in the Slack channel, because Alertmanager routed the alert to the `slack` receiver:
+
+![Slack notification](images/slack_alert.png)
+
+When the load stops, the request rate drops, the alert clears, and Slack receives a **RESOLVED** message:
+
+![Java alert resolved](images/slack_java_alerrt_resolved.png)
+
 
 ### Nginx: too many 4xx responses
 
