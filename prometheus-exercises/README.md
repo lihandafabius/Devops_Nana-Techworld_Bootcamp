@@ -4,7 +4,7 @@
       <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/prometheus/prometheus-original.svg" width="55" height="55" alt="Prometheus Logo" />
     </td>
     <td valign="middle">
-      <h1 style="border-bottom: none; margin: 0; padding: 0; line-height: 1.2;">Monitoring with Prometheus</h1>
+      <h1 style="border-bottom: none; margin: 0; padding: 0; line-height: 1.2;">Monitoring and Observability with Prometheus</h1>
       <span style="font-size: 15px; color: #57606a;">Metrics, Alerting and Notifications for a Java + MySQL Application on Kubernetes</span>
     </td>
   </tr>
@@ -87,32 +87,62 @@ Other requirements:
 - A running Kubernetes cluster (this project uses Amazon EKS) and its kubeconfig
 - `kubectl` and `helm` installed locally
 - A Docker Hub account to push the Java app image
-- A **Slack** workspace with an incoming webhook (set up in Exercise 4)
+- A **Slack** workspace with an incoming webhook 
 - A **Gmail app password** for the email notifications (a normal password does not work with SMTP)
-
-> **Note:** the Slack webhook URL and the Gmail app password are credentials. `slack-secret.yaml` and `email-secret.yaml` are listed in `.gitignore` and are never committed. A leaked Slack webhook is also revoked automatically by Slack, which would silently stop the notifications.
 
 ---
 
 <details>
 <summary> Exercise 1: Deploy the Application and Prepare the Setup</summary>
-
 <br />
-
-The starting point is a setup that is already running: a Java application with 3 replicas talking to MySQL, reachable from a browser through an Nginx Ingress. The Kubernetes cluster itself was provisioned separately with Terraform, and the application is deployed with the playbook from the earlier Ansible project, adjusted for this exercise.
-
+The starting point is a setup that is already running: a Java application with 3 replicas talking to MySQL, reachable from a browser through an Nginx Ingress.
+  
+The cluster itself was provisioned separately via Terraform (see [Terraform EKS project](https://github.com/lihandafabius/terraform-eks-infrastructure)). 
+ 
 | Component | Deployment | Detail |
 |---|---|---|
 | Java application | Deployment + Service | 3 replicas, image pushed to Docker Hub |
 | MySQL | Bitnami Helm chart | `architecture: replication`, 1 primary and 2 secondary replicas |
 | Ingress controller | `ingress-nginx` Helm chart | Exposed through an AWS load balancer |
 | Ingress rule | `ingress.yaml` | Routes the load balancer hostname to the Java service |
-
+ 
 ### Implementation
+ 
+The setup for this exercise is deployed by a single Ansible playbook, adapted from the earlier [Ansible project](https://github.com/lihandafabius/Devops_Nana-Techworld_Bootcamp/tree/main/ansible-exercises). 
 
-The playbook creates the namespace, deploys the ingress controller, then reads the load balancer hostname and writes it into the Ingress manifest and the application's frontend before building the image:
-
+It creates the namespace, deploys the ingress controller, builds and pushes the Java application image, and then deploys MySQL, the application and the Ingress rule:
+ 
 ```yaml
+---
+- name: Deploy java mysql app to k8's cluster
+  hosts: localhost
+  vars_files:
+    - project-vars
+ 
+ 
+  tasks:
+    - name: Create java app namespace
+      kubernetes.core.k8s:
+        name: java-app
+        api_version: v1
+        kind: Namespace
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+ 
+    - name: Add NGINX Ingress Repository
+      kubernetes.core.helm_repository:
+        name: ingress-nginx
+        repo_url: https://kubernetes.github.io/ingress-nginx
+ 
+    - name: Deploy NGINX Ingress Controller via Helm
+      kubernetes.core.helm:
+        name: ingress-nginx
+        chart_ref: ingress-nginx/ingress-nginx
+        release_namespace: ingress-nginx
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig }}"
+ 
+    # ---- Optional: automatic ALB address update ----
     - name: Get NGINX Ingress LoadBalancer Hostname
       kubernetes.core.k8s_info:
         kubeconfig: "{{ kubeconfig }}"
@@ -123,87 +153,142 @@ The playbook creates the namespace, deploys the ingress controller, then reads t
       until: ingress_service.resources[0].status.loadBalancer.ingress[0].hostname is defined
       retries: 20
       delay: 5
-
+ 
     - name: Set ALB Hostname Variable
       ansible.builtin.set_fact:
         alb_hostname: "{{ ingress_service.resources[0].status.loadBalancer.ingress[0].hostname }}"
-
+ 
     - name: Update host in ingress.yaml manifest
       ansible.builtin.replace:
         path: "{{ manifest_dir }}/ingress.yaml"
         regexp: '(host:\s*).*'
         replace: '\1"{{ alb_hostname }}"'
+ 
+    - name: Update const HOST in index.html frontend file
+      ansible.builtin.replace:
+        path: "{{ docker_app_dir }}/src/main/resources/static/index.html"
+        regexp: 'const HOST = ".*";'
+        replace: 'const HOST = "{{ alb_hostname }}";'
+    # ---- End of optional ALB address update ----
+ 
+    - name: Build Gradle project to package updated frontend JAR
+      ansible.builtin.command: ./gradlew clean build
+      args:
+        chdir: "{{ docker_app_dir }}"
+ 
+    - name: Log in to Docker Hub
+      community.docker.docker_login:
+        username: "{{ docker_username }}"
+        password: "{{ docker_password }}"
+ 
+    - name: Build Docker image for Java App
+      community.docker.docker_image:
+        build:
+          path: "{{ docker_app_dir }}"
+        name: "{{ docker_image }}"
+        source: build
+        force_source: true
+ 
+    - name: Push Java App image to Docker Hub
+      community.docker.docker_image:
+        name: "{{ docker_image }}"
+        push: true
+        source: local
+ 
+    - name: Create Docker registry secret for image pull
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: my-registry-key
+            namespace: java-app
+          type: kubernetes.io/dockerconfigjson
+          stringData:
+            .dockerconfigjson: "{{ {'auths': {'https://index.docker.io/v1/': {'username': docker_username, 'password': docker_password, 'auth': (docker_username + ':' + docker_password) | b64encode}}} | to_json }}"
+ 
+    - name: Apply mysql secret
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/mysql_secret.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+ 
+    - name: Apply mysql configmap
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/applicationconfig.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+ 
+    - name: Deploy MySQL via Helm charts
+      kubernetes.core.helm:
+        name: mysql
+        chart_ref: bitnami/mysql
+        release_namespace: java-app
+        kubeconfig: "{{ kubeconfig }}"
+        values_files:
+          - "{{ manifest_dir }}/helm-mysql-values.yaml"
+ 
+    - name: Deploy Java Application and Service
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/application-deployment.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+ 
+    - name: Apply Ingress rule for Java App
+      kubernetes.core.k8s:
+        src: "{{ manifest_dir }}/ingress.yaml"
+        state: present
+        kubeconfig: "{{ kubeconfig }}"
+
 ```
+ 
+The manifests and values applied by the playbook can be found in [`k8_manifests`](k8_manifests):
+ 
+- [`application-deployment.yaml`](k8_manifests/application-deployment.yaml): Java application Deployment (3 replicas) and Service
+- [`applicationconfig.yaml`](k8_manifests/applicationconfig.yaml): ConfigMap with the database connection details
+- [`mysql_secret.yaml`](k8_manifests/mysql_secret.yaml): MySQL credentials Secret
+- [`helm-mysql-values.yaml`](k8_manifests/helm-mysql-values.yaml): Bitnami MySQL chart values (replication with 1 primary and 2 secondary replicas)
+- [`ingress.yaml`](k8_manifests/ingress.yaml): Ingress rule for the Java application
 
-MySQL is deployed with the Bitnami chart, configured through `helm-mysql-values.yaml`:
-
-```yaml
-architecture: replication
-
-primary:
-  persistence:
-    storageClass: gp2
-
-secondary:
-  replicaCount: 2
-  persistence:
-    storageClass: gp2
-
-auth:
-  username: myuser
-  password: ...
-  database: "appdb"
-  rootPassword: ...
-  replicationUser: replicator
-  replicationPassword: replica123
-
-global:
-  security:
-    allowInsecureImages: true
-
-image:
-  registry: docker.io
-  repository: bitnamilegacy/mysql
-  tag: latest
-```
-
-> **Note on the images:** since August 2025 Bitnami only offers a limited set of free images, so the chart is pointed at the `bitnamilegacy` repository and `allowInsecureImages` is enabled. These legacy images receive no security updates. That is acceptable for a learning project but should be replaced with maintained images in production.
-
-#### Verify the setup
-
-```bash
-kubectl get pods -n java-app
-kubectl get ingress -n java-app
-```
-
-![Running resources](images/running_resources.png)
-
-![App through the ingress](images/app_with_alb_address.png)
-
+### Optional automation: the ALB address
+ 
+The AWS load balancer only gets its hostname once the ingress controller exists, so that hostname cannot be written into any file beforehand. Four optional tasks, marked with comments in the playbook, remove this manual step. After the ingress controller is deployed, the playbook reads the hostname from the `ingress-nginx-controller` Service, waiting until AWS has assigned it, and then uses it in two places:
+ 
+- **The Ingress rule:** the `host` field of `ingress.yaml` is replaced with the new hostname, so the rule always matches the current load balancer.
+- **The Java application:** the `const HOST` value in the frontend's `index.html` is replaced as well. The application is then rebuilt with Gradle and packaged into a fresh Docker image, so the frontend calls the correct address.
+This part is optional, since both values can also be edited by hand. Without these tasks, every rebuild of the cluster, which produces a new load balancer hostname, would need two manual edits before the application worked.
+ 
+![Running resources](images/cluster_resources.png)
+ 
+![App through the ingress](images/app.png)
+ 
 </details>
 
 ---
-
 <details>
 <summary> Exercise 2: Start Monitoring your Applications</summary>
 
 <br />
 
-The goal is to have Prometheus collect metrics from all three components. Everything revolves around one idea: the **Prometheus Operator** watches the cluster for `ServiceMonitor` objects, and each one tells Prometheus *which Service to scrape, on which port and path*.
+The goal is to have Prometheus collect metrics from all three components. Everything revolves around one idea: the **Prometheus Operator** watches the cluster for `ServiceMonitor` objects, and each one tells Prometheus *which Service to scrape, on which port and path*. Prometheus operator let's us create custom k8's components defined by Custom Resource Definitions (CRD's)
 
 ```
 App  →  metrics endpoint  →  Service  →  ServiceMonitor (label matches)  →  Prometheus
 ```
 
+Third party applications such as MySQL usually need a separate **exporter** application that translates their internal statistics into Prometheus format. But some cloud native applications may have the metrics scraping configuration inside and may not require an additional exporter application, so it is worth checking whether an application's Helm chart already supports it before deploying one.
+
 | Application | Who exposes the metrics | How the ServiceMonitor is created |
 |---|---|---|
-| Nginx Ingress Controller | The controller itself (port 10254) | Helm values |
-| MySQL | A `mysqld-exporter` sidecar (port 9104) | Helm values (bundled in the Bitnami chart) |
-| Java application | The app itself, on port **8081** | Written by hand |
+| Nginx Ingress Controller | The controller itself (cloud native, no exporter needed) | Helm values |
+| MySQL | A `mysqld-exporter` container bundled in the Bitnami chart (port 9104) | Helm values |
+| Java application | The app itself, through the Prometheus Java client, on port **8081** | Written by hand |
 
 ### Deploy the Prometheus Operator
 
-The `kube-prometheus-stack` chart installs Prometheus, Alertmanager, Grafana, node-exporter, kube-state-metrics and the Operator with its custom resource definitions. The release name matters, because it is used as a label later:
+The [`kube-prometheus-stack`](https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack) chart, from the [prometheus-community Helm charts](https://github.com/prometheus-community/helm-charts) repository, installs Prometheus, Alertmanager, Grafana, node-exporter, kube-state-metrics and the Operator with its custom resource definitions. Two tasks are added to the playbook, one to add the chart repository and one to deploy the stack:
 
 ```yaml
     - name: Add Prometheus community Helm repository
@@ -220,15 +305,31 @@ The `kube-prometheus-stack` chart installs Prometheus, Alertmanager, Grafana, no
         kubeconfig: "{{ kubeconfig }}"
         wait: true
         wait_timeout: 10m
+        values:
+          alertmanager:
+            alertmanagerSpec:
+              alertmanagerConfigMatcherStrategy:
+                type: None
 ```
 
-> **Note:** by default Prometheus only picks up ServiceMonitors that carry the label `release: <helm release name>`, here `release: monitoring`. A ServiceMonitor without it exists but is silently ignored, which is the most common reason for a missing target.
+> **Notes:**
+> 1. **Automation:** the tasks are placed in the playbook for automation purposes, so the whole setup can be rebuilt with one command. The Prometheus Operator does not have to be deployed through Ansible: the same stack can be installed directly in the cluster with a single Helm command and the necessary options.
+> 2. **Placement:** these tasks go right after the namespace task, before the ingress controller. The `ServiceMonitor` resource type is created by the Operator, so it has to exist before the Nginx values, the MySQL values and the Java application manifest ask for one. `wait: true` makes Ansible hold until the stack is ready.
+> 3. **Release name:** it is used as a label later. By default Prometheus only picks up ServiceMonitors that carry `release: <helm release name>`, here `release: monitoring`. A ServiceMonitor without it exists but is silently ignored, which is the most common reason for a missing target.
+> 4. **`alertmanagerConfigMatcherStrategy`:** this setting is only needed for the notifications in Exercise 4 and is explained there.
 
 ### Nginx Ingress Controller
 
-The controller already exposes metrics, so only the flags are needed in the Helm values of the existing task:
+The ingress controller already exposes metrics, so no exporter is needed. The existing ingress controller task only needs the metrics flags in its Helm values, which also create the ServiceMonitor:
 
 ```yaml
+    - name: Deploy NGINX Ingress Controller via Helm
+      kubernetes.core.helm:
+        name: ingress-nginx
+        chart_ref: ingress-nginx/ingress-nginx
+        release_namespace: ingress-nginx
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig }}"
         values:
           controller:
             metrics:
@@ -241,7 +342,7 @@ The controller already exposes metrics, so only the flags are needed in the Helm
 
 ### MySQL
 
-MySQL cannot speak Prometheus on its own. The chart can add an exporter container next to each MySQL pod, which reads MySQL's internal statistics and republishes them in Prometheus format. The block below is added to `helm-mysql-values.yaml`:
+MySQL cannot speak Prometheus on its own, but the Bitnami chart already has the metrics configuration built in: when enabled, it adds a `mysqld-exporter` container next to each MySQL pod, which reads MySQL's internal statistics and republishes them in Prometheus format. The block below is added to [`helm-mysql-values.yaml`](k8_manifests/helm-mysql-values.yaml):
 
 ```yaml
 metrics:
@@ -259,7 +360,7 @@ Because of the extra exporter container, the MySQL pods change from `1/1` to `2/
 
 ### Java application
 
-The application registers its own metrics with the Prometheus Java client and serves them from a separate HTTP server on port **8081**. `AppController.java` defines two metrics:
+The Java application is monitored through the **Prometheus client libraries**. It registers its own metrics and serves them from a separate HTTP server on port **8081**, which is why the metrics are not on the application's normal port. `AppController.java` defines two metrics, a counter of all requests and a gauge of the requests currently in progress, and both are updated by the `/get-data` and `/update-roles` endpoints:
 
 ```java
 static final Counter totalRequests = Counter.build()
@@ -268,7 +369,25 @@ static final Gauge inprogressRequests = Gauge.build()
         .name("java_app_inprogress_requests").help("Inprogress requests.").register();
 ```
 
-Because the ServiceMonitor selects a Service *by labels* and a port *by name*, the Service of the Java application was extended with a label and a named metrics port. The ServiceMonitor is added to the same manifest:
+`Application.java` starts the metrics server on port 8081. The bridge line makes the metrics defined in `AppController` visible to that server:
+
+```java
+SimpleclientCollector.builder().register();
+JvmMetrics.builder().register();   // optional: memory, GC and thread metrics
+HTTPServer server = HTTPServer.builder().port(8081).buildAndStart();
+```
+
+The matching dependencies in `build.gradle` (excerpt):
+
+```gradle
+implementation 'io.prometheus:simpleclient:0.16.0'
+implementation 'io.prometheus:prometheus-metrics-core:1.3.3'
+implementation 'io.prometheus:prometheus-metrics-exporter-httpserver:1.3.3'
+implementation 'io.prometheus:prometheus-metrics-instrumentation-jvm:1.3.3'
+implementation 'io.prometheus:prometheus-metrics-simpleclient-bridge:1.3.3'
+```
+
+Because the ServiceMonitor selects a Service *by labels* and a port *by name*, the Service in [`application-deployment.yaml`](k8_manifests/application-deployment.yaml) was given a label and a named metrics port next to the application port:
 
 ```yaml
 apiVersion: v1
@@ -289,6 +408,11 @@ spec:
     port: 8081
     targetPort: 8081
   type: ClusterIP
+```
+
+The ServiceMonitor is added to the same manifest:
+
+```yaml
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -302,12 +426,15 @@ spec:
   endpoints:
   - port: metrics
     path: /metrics
+  namespaceSelector: # enables prometheus to discover it since it is in another ns
+    matchNames:
+    - java-app
   selector:
     matchLabels:
       app: java-mysql-app
 ```
 
-> **Note:** the path is `/metrics` on port **8081**. The root path `/` serves an HTML landing page, which Prometheus rejects with `received unsupported Content-Type "text/html"`.
+> **Note:** the metrics are on port **8081**, at the path `/metrics`. The root path `/` serves an HTML landing page, which Prometheus rejects with `received unsupported Content-Type "text/html"`.
 
 ### Verify in the Prometheus UI
 
@@ -315,15 +442,7 @@ spec:
 kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090
 ```
 
-Under **Status → Targets** all three applications must show as **UP**:
-
-- `serviceMonitor/ingress-nginx/ingress-nginx-controller/0`
-- `serviceMonitor/java-app/mysql/...`
-- `serviceMonitor/java-app/java-mysql-app/0` (3 endpoints, one per replica)
-
-![Prometheus targets](images/prometheus_targets.png)
-
-> **Note:** a target showing **UP** only means the scrape succeeded, not that metrics were collected. The column `scrape_samples_scraped` shows how many samples each target really returned. This difference mattered for the Java application (see Challenges).
+![Prometheus targets](images/application_metrics.png)
 
 </details>
 
@@ -370,7 +489,6 @@ spec:
       annotations:
         summary: "Too many 4xx errors on nginx-ingress"
         description: "{{ $value | printf \"%.1f\" }}% of HTTP requests returned 4xx\n Value = {{ $value }}"
-        # runbook_url: "https://wiki.yourdomain.com/runbooks/nginx-high-4xx-rate"
 
   - name: mysql.rules
     rules:
@@ -382,7 +500,6 @@ spec:
       annotations:
         summary: "MySQL down (all instances)"
         description: "No MySQL instance is up\n Value = {{ $value }}"
-        # runbook_url: "https://wiki.yourdomain.com/runbooks/mysql-down"
 
     - alert: MysqlTooManyConnections
       expr: mysql_global_status_threads_connected / mysql_global_variables_max_connections * 100 > 80
@@ -392,7 +509,6 @@ spec:
       annotations:
         summary: "MySQL too many connections (instance {{ $labels.instance }})"
         description: "{{ $value | printf \"%.0f\" }}% of max connections used\n LABELS = {{ $labels }}"
-        # runbook_url: "https://wiki.yourdomain.com/runbooks/mysql-too-many-connections"
 
   - name: java-app.rules
     rules:
@@ -404,7 +520,6 @@ spec:
       annotations:
         summary: "Java application receiving too many requests"
         description: "Request rate is {{ $value | printf \"%.1f\" }} per second\n Value = {{ $value }}"
-        # runbook_url: "https://wiki.yourdomain.com/runbooks/java-app-too-many-requests"
 
   - name: kubernetes.rules
     rules:
@@ -416,12 +531,13 @@ spec:
       annotations:
         summary: "StatefulSet {{ $labels.statefulset }} has unready replicas"
         description: "Namespace {{ $labels.namespace }}\n Value = {{ $value }}"
-        # runbook_url: "https://wiki.yourdomain.com/runbooks/statefulset-replicas-mismatch"
 ```
 
 ### How the rules work
 
-Each rule has an `expr` (a PromQL query), a `for` duration, `labels` and `annotations`. An alert moves through three states:
+Each rule has an `expr` (a PromQL query), a `for` duration, `labels` and `annotations`. The `for` causes prometheus to wait for a certain duration to see if the application could resolve itself before firing the alert, `labels` allow a custom set of additional labels to be attached to an alert, and finally `annotations` specify a set of informational labels for longer additional information.
+
+An alert moves through three states:
 
 ```
 condition false           → Inactive
@@ -435,7 +551,8 @@ still true after `for`    → Firing   (sent to Alertmanager)
 - **Java requests:** `rate()` of the application's own counter, summed over all 3 replicas so the threshold applies to the whole application.
 - **StatefulSet mismatch:** both metrics come from kube-state-metrics, which the stack installs. Since MySQL runs as a StatefulSet, a lost replica triggers it.
 
-The `severity` label does not change how Prometheus behaves. It is a tag that Alertmanager can use for routing. The commented `runbook_url` lines are placeholders for links to runbook pages that describe the fix for each alert.
+The `severity` label does not change how Prometheus behaves. It is a tag that Alertmanager can use for routing. 
+>`runbook_url` can be added to the annotations part to  provide a list of links for a probable solution fix for an issue, this makes it easy to access documentation for a particular issue. This could be a repository wiki page in common wiki platforms; Github, gitlab, confluence, notion, etc.
 
 #### Verify
 
@@ -467,8 +584,16 @@ Alerts that only show up in the Prometheus UI help nobody who is not looking at 
 ### Slack webhook
 
 1. Create a Slack workspace and a channel for the alerts.
-2. On `api.slack.com/apps` choose **Create New App → Blank app** (the AI agent and starter app templates are not needed).
+2. On `api.slack.com/apps` choose **Create New App → Blank app**.
+
+   ![Slack App](images/slack_app.png)
+
 3. Open **Incoming Webhooks**, switch them on, click **Add New Webhook to Workspace**, pick the channel and copy the URL.
+   
+   ![Add New webhook](images/webhook_url.png)
+
+   ![Add Channel](images/webhook_config.png)
+   
 4. Test it before involving Kubernetes:
 
 ```bash
@@ -476,6 +601,21 @@ curl -X POST -H 'Content-type: application/json' \
   --data '{"text":"Test message from Prometheus setup"}' \
   '<webhook-url>'
 ```
+![Test webhook](images/curl_ok_response.png)
+
+
+### Gmail app password
+
+Alertmanager sends the emails through Gmail's SMTP server. Gmail does not accept a normal account password for this, so an **app password** is created for Alertmanager to use instead.
+
+1. Sign in to the Google account that will send the alert emails.
+2. Turn on **2-Step Verification** under **Manage your Google Account → Security → 2-Step Verification**. App passwords are only available once it is on.
+3. Open **App passwords** (search for "App passwords" in the account settings), enter a name such as `alertmanager` and click **Create**.
+4. Copy the 16 character password that Google shows. It is displayed only once, and the spaces in it are not part of the password.
+5. Test it before involving Kubernetes, with an email sent through the same SMTP server.
+
+The app password is a credential, so it is stored in a Kubernetes Secret and never committed to the repository.
+
 
 ### Secrets
 
@@ -511,8 +651,8 @@ metadata:
   namespace: monitoring
 spec:
   route:
-    receiver: 'null'            # anything not matched below is discarded
-    repeatInterval: 30m
+    receiver: 'null'           # default: anything not matched below is discarded
+    repeatInterval: 30m        # if the issue still persists, notify again after 30 minutes
     routes:
     - receiver: 'slack'
       matchers:
@@ -534,7 +674,7 @@ spec:
     - apiURL:
         name: slack-webhook
         key: url
-      channel: '#dev-alerts'
+      channel: 'dev-alerts'
       sendResolved: true
       title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
       text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ "\n" }}{{ .Annotations.description }}{{ "\n" }}{{ end }}'
@@ -552,6 +692,8 @@ spec:
       sendResolved: true
 ```
 
+> **Note on the `null` receiver:** `null` is a receiver without any configuration, so it sends nothing. It is the default, which means every alert that matches neither route is discarded. `kube-prometheus-stack` ships many built-in alerts, such as `Watchdog`, which always fires on purpose, and `KubeControllerManagerDown` and `KubeSchedulerDown`, which are false alarms on Amazon EKS, where AWS manages the control plane. Without a `null` default they would flood the inbox and hide the real alerts. Discarded alerts still fire in Prometheus and show in the Alertmanager UI, they just send no notification.
+
 - **Routes** are checked from top to bottom and the first match wins. `matchType: '=~'` is a regex match, so one route covers several alert names.
 - **`repeatInterval`** is how long Alertmanager waits before notifying again while an alert is still firing.
 - **`sendResolved: true`** sends a second message when the problem clears.
@@ -559,7 +701,11 @@ spec:
 
 ### Required stack setting
 
-The Operator automatically adds a `namespace="monitoring"` matcher to every route of an `AlertmanagerConfig`. Alerts built from Kubernetes metrics carry the namespace of the object they describe, and the others carry no namespace at all, so none of them match and no notification is ever sent. The matching is switched off in the values of the `kube-prometheus-stack` task:
+By default, the Prometheus Operator only lets an `AlertmanagerConfig` handle alerts that carry the label `namespace="monitoring"`, the namespace the config lives in. This rule exists for shared clusters: it stops one team's config from catching, or interfering with, another team's alerts.
+
+The alerts in this project don't have that label (the Java and Nginx alerts have no namespace at all, and the StatefulSet alert has `namespace="java-app"`), so they fire in Prometheus but **no notification is ever sent**.
+
+On a single-team cluster this protection isn't needed, so it is switched off in the values of the `kube-prometheus-stack` task:
 
 ```yaml
         values:
@@ -569,37 +715,16 @@ The Operator automatically adds a `namespace="monitoring"` matcher to every rout
                 type: None
 ```
 
-### Playbook tasks
+The resources are applied with `kubectl`. The secrets go first, so they exist when the Alertmanager config loads, and the Operator's custom resource definitions have to be there already:
 
-The resources are applied at the end of the playbook, after the Operator's custom resource definitions exist and the secrets are in place:
-
-```yaml
-    - name: Apply Slack webhook secret
-      kubernetes.core.k8s:
-        src: "{{ manifest_dir }}/slack-secret.yaml"
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-
-    - name: Apply Gmail auth secret
-      kubernetes.core.k8s:
-        src: "{{ manifest_dir }}/email-secret.yaml"
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-
-    - name: Apply Prometheus alert rules
-      kubernetes.core.k8s:
-        src: "{{ manifest_dir }}/alert-rules.yaml"
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-
-    - name: Apply Alertmanager config (Slack and email routing)
-      kubernetes.core.k8s:
-        src: "{{ manifest_dir }}/alertmanager-config.yaml"
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
+```bash
+kubectl apply -f slack-secret.yaml
+kubectl apply -f email-secret.yaml
+kubectl apply -f alert-rules.yaml
+kubectl apply -f alert-manager-configuration.yaml
 ```
 
-#### Verify
+![Secrets](images/secrets.png)
 
 ```bash
 kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-alertmanager 9093:9093
@@ -607,7 +732,6 @@ kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-alertmanager 9
 
 On `http://localhost:9093` the **Status** page lists both receivers and the route tree, and firing alerts show the receiver they were routed to.
 
-![Alertmanager status](images/alertmanager_status.png)
 
 </details>
 
@@ -832,5 +956,12 @@ Once routing worked, emails started arriving for `KubeControllerManagerDown`, `K
           kubeProxy:
             enabled: false
 ```
+
+
+
+### 6. Flood of emails from built-in alerts
+
+Once the notifications worked, the inbox started receiving emails for alerts that were never configured: `Watchdog`, `KubeControllerManagerDown` and `KubeSchedulerDown`. They are default alerts of `kube-prometheus-stack` that were always firing, but had been filtered out until `alertmanagerConfigMatcherStrategy: None` was set. Every alert that matched neither route fell through to the default receiver, which was `email`. On Amazon EKS two of them can never be fixed, because AWS manages the control plane and does not expose those components to Prometheus.
+The fix was to make the default receiver a `null` receiver, defined without any configuration, so only the five alerts routed on purpose notify anyone. Lesson learned: the default receiver decides what happens to everything that was not planned for. If it is noisy, the real alerts get lost among false alarms.
 
 ---
