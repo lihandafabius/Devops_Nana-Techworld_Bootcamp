@@ -869,7 +869,9 @@ The MySQL pods come back and become ready again:
 ![Restart app pod](images/mysql_soln.png)
 
 The restart of the Java application is needed because its single database connection does not reconnect by itself.
+Finally, the restarted Java pods reconnect to the database, and the application shows its data again:
 
+![App with DB](images/app.png)
 
 Alertmanager routes the alert to the `slack` receiver. Slack receives a **FIRING** message while MySQL is down, and a **RESOLVED** message once the exporters report it as up again:
 
