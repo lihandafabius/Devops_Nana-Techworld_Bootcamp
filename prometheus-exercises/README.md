@@ -797,7 +797,7 @@ About 30 seconds later, the notification arrives in the Slack channel, because A
 
 When the load stops, the request rate drops, the alert clears, and Slack receives a **RESOLVED** message:
 
-![Java alert resolved](images/slack_java_alerrt_resolved.png)
+![Java alert resolved](images/slack_java_alert_resolved.png)
 
 
 ### Nginx: too many 4xx responses
