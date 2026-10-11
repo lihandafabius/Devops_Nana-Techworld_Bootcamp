@@ -726,8 +726,6 @@ kubectl apply -f alert-manager-configuration.yaml
 
 ![Secrets](images/secrets.png)
 
-#### Verify
-
 ```bash
 kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-alertmanager 9093:9093
 ```
