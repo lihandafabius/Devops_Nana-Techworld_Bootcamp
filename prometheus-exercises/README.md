@@ -835,20 +835,45 @@ Deleting a single secondary pod triggers the StatefulSet alert, not `MysqlDown`,
 kubectl delete pod mysql-secondary-1 -n java-app
 ```
 
-To test `MysqlDown`, all MySQL pods are stopped (the data stays on the persistent volumes) and brought back afterwards:
+To test `MysqlDown`, all MySQL pods are stopped. The data stays on the persistent volumes, so nothing is lost:
 
 ```bash
 kubectl scale sts mysql-primary mysql-secondary -n java-app --replicas=0
+```
 
+The MySQL pods are terminated, and the cluster no longer has any MySQL instance:
+
+![Mysql test alert](images/mysql_test_alert.png)
+
+With the pods gone, their `mysql_up` metrics disappear as well. This is the case that `absent(mysql_up)` in the alert rule covers, so the alert fires even though there are no exporters left to report that MySQL is down:
+
+![Mysql test alert](images/mysql_firing.png)
+
+Meanwhile the Java application is running without its database, so the page that depends on MySQL no longer shows any data:
+
+![App without Database](images/app_without_db.png)
+
+To recover, MySQL is scaled back to its original size (1 primary and 2 secondaries), and the Java application is restarted:
+
+![Bring back mysql](images/resolve_mysql.png)
+
+```bash
 # recovery
 kubectl scale sts mysql-primary -n java-app --replicas=1
 kubectl scale sts mysql-secondary -n java-app --replicas=2
 kubectl rollout restart deployment/java-mysql-app -n java-app
 ```
 
-The restart of the Java application is needed because its single database connection does not reconnect by itself. In the alert message `Value = 1` is expected in this case, because it is the result of `absent(mysql_up)`, which returns 1 for "the metric is missing".
+The MySQL pods come back and become ready again:
 
-![MySQL down alert in Slack](images/mysql_down_slack.png)
+![Restart app pod](images/mysql_soln.png)
+
+The restart of the Java application is needed because its single database connection does not reconnect by itself.
+
+
+Alertmanager routes the alert to the `slack` receiver. Slack receives a **FIRING** message while MySQL is down, and a **RESOLVED** message once the exporters report it as up again:
+
+![MySQL down alert in Slack](images/slack_notifications.png)
 
 </details>
 
