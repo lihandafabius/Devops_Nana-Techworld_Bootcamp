@@ -814,7 +814,18 @@ done
 
 Every request returns a 404, so the 4xx share jumps toward 100% while the script runs and the alert follows after its one minute.
 
-![Email notification](images/email_notification.png)
+The script is run with the hostname of the load balancer, and it keeps requesting a path that does not exist:
+
+![Trigger Nginx Alert](images/trigger_nginx_alerts.png)
+
+Once more than 5% of the requests have been 4xx for a full minute, the alert is **Firing** in Prometheus and is handed to Alertmanager:
+
+![Nginx Firing](images/nginx_firing.png)
+
+About 30 seconds later the notification arrives by email, because Alertmanager routed the alert to the `email` receiver:
+
+![Email notification](images/alert_nginx_email_alert.png)
+
 
 ### MySQL
 
