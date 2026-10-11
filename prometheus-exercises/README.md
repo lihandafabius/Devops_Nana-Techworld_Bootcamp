@@ -864,10 +864,6 @@ kubectl scale sts mysql-secondary -n java-app --replicas=2
 kubectl rollout restart deployment/java-mysql-app -n java-app
 ```
 
-The MySQL pods come back and become ready again:
-
-![Restart app pod](images/mysql_soln.png)
-
 The restart of the Java application is needed because its single database connection does not reconnect by itself.
 Finally, the restarted Java pods reconnect to the database, and the application shows its data again:
 
