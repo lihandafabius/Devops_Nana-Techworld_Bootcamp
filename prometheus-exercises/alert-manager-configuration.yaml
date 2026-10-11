@@ -5,7 +5,7 @@ metadata:
   namespace: monitoring
 spec:
   route:
-    receiver: 'email'          # default for anything not matched below
+    receiver: 'email'          # default for anything not matched below, use 'null' to discard anything not matched if they are not important.
     repeatInterval: 30m        # if the issue still persist send another email in 30 mins time
     routes:
     - receiver: 'slack'
@@ -27,7 +27,7 @@ spec:
     - apiURL:
         name: slack-webhook
         key: url
-      channel: 'all-dev-alerts'
+      channel: 'dev-alerts'
       sendResolved: true
       title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
       text: '{{ range .Alerts }}{{ .Annotations.summary }}{{ "\n" }}{{ .Annotations.description }}{{ "\n" }}{{ end }}'
