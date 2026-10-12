@@ -890,7 +890,7 @@ kubectl get secret -n monitoring monitoring-grafana -o jsonpath="{.data.admin-pa
 
 The dashboard, **Java App Traffic**, is split into four sections, one for each part of the setup, so that traffic and health can be followed at a glance:
 
-| Section | Panel | Query | Type | Unit |
+| Row   | Panel | Query | Type | Unit |
 |---|---|---|---|---|
 | Nginx | Nginx requests by status | `sum by (status) (rate(nginx_ingress_controller_requests[1m]))` | Time series | requests/sec |
 | Nginx | Nginx 4xx percentage | `sum(rate(nginx_ingress_controller_requests{status=~"4.."}[1m])) / sum(rate(nginx_ingress_controller_requests[1m])) * 100` | Gauge | Percent (0-100) |
