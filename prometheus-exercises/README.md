@@ -876,50 +876,59 @@ Alertmanager routes the alert to the `slack` receiver. Slack receives a **FIRING
 </details>
 
 ---
-
 <details>
 <summary> Grafana Dashboard</summary>
 
 <br />
 
-Grafana is installed by the same chart and already has Prometheus configured as its data source, so only the panels needed to be built.
+Prometheus stores and alerts on the metrics, but Grafana makes them easy to read. It is installed by the same `kube-prometheus-stack` chart and already has Prometheus configured as its data source, so only the dashboard had to be built. Grafana is reached with a port-forward, and the admin password is stored in a Kubernetes Secret:
 
-| Panel | Query | Type |
-|---|---|---|
-| Nginx requests by status | `sum by (status) (rate(nginx_ingress_controller_requests[1m]))` | Time series |
-| Nginx 4xx percentage | `sum(rate(nginx_ingress_controller_requests{status=~"4.."}[1m])) / sum(rate(nginx_ingress_controller_requests[1m])) * 100` | Time series, threshold line at 5 |
-| Java request rate per pod | `sum by (pod) (rate(java_app_http_requests_total[1m]))` | Time series |
-| Java in-progress requests | `sum(java_app_inprogress_requests)` | Stat |
-| MySQL connections | `mysql_global_status_threads_connected` | Time series |
-| MySQL instances up | `sum(mysql_up) or vector(0)` | Stat |
-| StatefulSet ready replicas | `kube_statefulset_status_replicas_ready{namespace="java-app"}` | Time series |
-
-`or vector(0)` on the MySQL panel makes it show **0** when all instances are gone, instead of "No data". The same `absent()` trick belongs in the alert rule, not in the panel, because `absent()` returns 1 when something is missing.
-
-Dashboards built in the Grafana UI live inside the Grafana pod, and persistence is off by default, so a restart of the pod deletes them. The dashboard is therefore exported as JSON and stored in a ConfigMap. The Grafana sidecar loads every ConfigMap that carries the label `grafana_dashboard: "1"`:
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: java-app-dashboard
-  namespace: monitoring
-  labels:
-    grafana_dashboard: "1"
-data:
-  java-app-dashboard.json: |
-    <exported dashboard JSON>
+```bash
+kubectl port-forward -n monitoring svc/monitoring-grafana 8082:80
+kubectl get secret -n monitoring monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 -d
 ```
 
-```yaml
-    - name: Apply Grafana dashboard
-      kubernetes.core.k8s:
-        src: "{{ manifest_dir }}/grafana-dashboard.yaml"
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-```
+The dashboard, **Java App Traffic**, is split into four sections, one for each part of the setup, so that traffic and health can be followed at a glance:
 
-![Grafana dashboard](images/grafana_dashboard.png)
+| Section | Panel | Query | Type | Unit |
+|---|---|---|---|---|
+| Nginx | Nginx requests by status | `sum by (status) (rate(nginx_ingress_controller_requests[1m]))` | Time series | requests/sec |
+| Nginx | Nginx 4xx percentage | `sum(rate(nginx_ingress_controller_requests{status=~"4.."}[1m])) / sum(rate(nginx_ingress_controller_requests[1m])) * 100` | Gauge | Percent (0-100) |
+| Java App | Java app request rate (per pod) | `sum by (pod) (rate(java_app_http_requests_total[1m]))` | Time series | requests/sec |
+| Java App | Java app in-progress requests | `sum(java_app_inprogress_requests)` | Stat | none |
+| MySQL | MySQL connections | `mysql_global_status_threads_connected` | Time series | none |
+| MySQL | MySQL instances up | `sum(mysql_up) or vector(0)` | Stat | none |
+| StatefulSets Replicas | StatefulSet ready replicas | `kube_statefulset_status_replicas_ready{namespace="java-app"}` | Time series | none |
+
+Each panel is created with **Dashboards → New → New dashboard → Add visualization**: select the **Prometheus** data source, switch the query editor from *Builder* to *Code*, paste the query, then choose the visualization type, the unit and a title.
+
+`or vector(0)` on the *MySQL instances up* panel makes it show **0** when all instances are gone, instead of "No data". The same case is handled in the alert rule with `absent()`, but that function does not belong in the panel, because `absent()` returns 1 when something is missing.
+
+#### Before the tests
+
+With nothing happening, the request rates stay flat. In MySQL, the connections are steady, all 3 instances are up, and the StatefulSets report their replicas as ready. This is the baseline for the tests of Exercise 5:
+
+![Nginx and Java App before firing](images/b4_test_nj_dash.png)
+
+![MySQL and StatefulSets before firing](images/b4_test_Ms_dash.png)
+
+#### After the Java application test
+
+The load script produces a clear spike on both sections. Nginx shows the `200` responses climbing to about 50 requests per second, and the request rate per pod peaks at about 17 on each of the three replicas, around 52 in total. This is far above the alert threshold of 10:
+
+![Dashboard after the Java test](images/after_java_app_test_dash.png)
+
+#### After the Nginx test
+
+The requests to a path that does not exist are all counted as `404`. The `404` line rises in *Nginx requests by status*, and the *Nginx 4xx percentage* gauge goes to 100, well beyond the 5% of the alert:
+
+![Dashboard after the Nginx test](images/nginx_too_many_requests_dash.png)
+
+#### After the MySQL test
+
+When the MySQL pods are scaled down, *MySQL instances up* drops to 0, the connections disappear, and the ready replicas of both StatefulSets fall to 0. They rise again once MySQL is scaled back up:
+
+![Dashboard after the MySQL test](images/mysql_alert_dash.png)
 
 </details>
 
