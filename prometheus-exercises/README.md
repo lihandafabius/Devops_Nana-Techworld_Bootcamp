@@ -939,22 +939,15 @@ When the MySQL pods are scaled down, *MySQL instances up* drops to 0, the connec
 
 <br />
 
-### 1. `no matches for kind "ServiceMonitor"` when deploying the ingress controller
+### 1. `ImagePullBackOff` on the MySQL exporter
 
-Rerunning the playbook on a fresh cluster failed at the Nginx task:
+After enabling `metrics.enabled` in the MySQL values, the MySQL pods showed `1/2` ready, with the exporter container stuck pulling its image:
 
-```
-no matches for kind "ServiceMonitor" in version "monitoring.coreos.com/v1"
-ensure CRDs are installed first
-```
+![ImagePullBackOff](images/mysql_error.png)
 
-The Nginx values ask the chart to create a ServiceMonitor, but that resource type is defined by the Prometheus Operator, which did not exist yet. The fix was ordering: `kube-prometheus-stack` is installed first with `wait: true`, so the Operator and its custom resource definitions are ready before anything that depends on them. The same reasoning applies to the MySQL metrics, the Java ServiceMonitor, the alert rules and the Alertmanager config.
+`mysql-primary-0` and `mysql-secondary-1` were stuck in `ImagePullBackOff`, while `mysql-secondary-0` was still `1/1` and running. A StatefulSet updates one pod at a time and waits for each one to become ready, so the remaining pod stayed on the old version and kept running. It is a safety feature: a bad update stops instead of breaking every replica, which is why the database kept serving the application during the failure.
 
----
-
-### 2. `ImagePullBackOff` on the MySQL exporter
-
-After enabling `metrics.enabled`, the MySQL pods showed `1/2` ready, with the exporter container stuck pulling its image. The default exporter image comes from the Bitnami repository affected by the 2025 catalogue change. Pointing it at the legacy repository, as already done for MySQL itself, fixed it:
+The cause: the default exporter image comes from the Bitnami repository affected by the 2025 catalogue change, so it can no longer be pulled. Pointing it at the legacy repository, as already done for MySQL itself, fixed it:
 
 ```yaml
 metrics:
@@ -962,72 +955,48 @@ metrics:
     registry: docker.io
     repository: bitnamilegacy/mysqld-exporter
 ```
+I then deleted the old failed pods and rolled out the restart deployment of the app to sync with the changes
 
-During the rollout only some pods were stuck. A StatefulSet updates one pod at a time and waits for each to become ready, so the remaining pod stayed on the old version and kept running. It is a safety feature: a bad update stops instead of breaking every replica.
+![Mysql Error fox](images/mysql_soln.png)
+
 
 ---
 
-### 3. Java target UP, but zero metrics
+### 2. Alerts firing in Prometheus, but no notifications
 
-The Prometheus target for the Java application was **UP**, yet the metric did not exist, and Grafana panels were empty. Looking at the target's own series showed the cause:
+The alerts reached the **Firing** state in Prometheus, and the Slack webhook worked when it was tested directly with `curl`, yet nothing arrived in Slack. The Alertmanager log had no entries about Slack at all, which meant it never even tried to send anything. The alert only carried two labels, `alertname` and `severity`.
 
-```
-scrape_samples_scraped = 0
-```
+The cause: the Prometheus Operator automatically adds a `namespace="monitoring"` matcher to every route of an `AlertmanagerConfig`, the namespace the config lives in. This protects shared clusters from one team's config catching another team's alerts. The alerts in this project do not carry that label, so none of them matched a route.
 
-Prometheus could reach port 8081 and got a valid but **empty** response. The project used two generations of the Prometheus Java client at once:
-
-| Library | Dependencies | Used by |
-|---|---|---|
-| Old client (0.16.0) | `simpleclient` | `AppController` (the counter and gauge) |
-| New client (1.3.3) | `prometheus-metrics-*` | The HTTP server on port 8081 |
-
-Each client has its own registry, and the server on 8081 only serves the new one, so the controller's metrics were never exposed. The fix was the official bridge library, registered before the server starts:
-
-```gradle
-implementation 'io.prometheus:prometheus-metrics-simpleclient-bridge:1.3.3'
-```
-
-```java
-SimpleclientCollector.builder().register();
-JvmMetrics.builder().register();   // optional: memory, GC and thread metrics
-HTTPServer server = HTTPServer.builder().port(8081).buildAndStart();
-```
-
-Because the image tag does not change, `kubectl rollout restart deployment/java-mysql-app -n java-app` is needed after pushing the new image.
-
----
-
-
-### 5. Unwanted emails from default alerts
-
-Once routing worked, emails started arriving for `KubeControllerManagerDown`, `KubeSchedulerDown` and `Watchdog`. They are default alerts of the stack that were always firing but had been filtered out by the namespace matcher. `Watchdog` fires on purpose to prove the pipeline works. The other two are false alarms on Amazon EKS, where AWS manages the control plane and does not expose those components to Prometheus. Two changes fixed it:
-
-- The default receiver of the route became `null`, so only the explicit routes notify anyone.
-- The rules that cannot work on EKS were disabled in the stack values:
+The fix was to switch off that matcher in the values of the `kube-prometheus-stack` task:
 
 ```yaml
-          defaultRules:
-            rules:
-              kubeControllerManager: false
-              kubeSchedulerAlerting: false
-              etcd: false
-              kubeProxy: false
-          kubeControllerManager:
-            enabled: false
-          kubeScheduler:
-            enabled: false
-          kubeEtcd:
-            enabled: false
-          kubeProxy:
-            enabled: false
+              alertmanagerConfigMatcherStrategy:
+                type: None
 ```
 
-
-
-### 6. Flood of emails from built-in alerts
-
-Once the notifications worked, the inbox started receiving emails for alerts that were never configured: `Watchdog`, `KubeControllerManagerDown` and `KubeSchedulerDown`. They are default alerts of `kube-prometheus-stack` that were always firing, but had been filtered out until `alertmanagerConfigMatcherStrategy: None` was set. Every alert that matched neither route fell through to the default receiver, which was `email`. On Amazon EKS two of them can never be fixed, because AWS manages the control plane and does not expose those components to Prometheus.
-The fix was to make the default receiver a `null` receiver, defined without any configuration, so only the five alerts routed on purpose notify anyone. Lesson learned: the default receiver decides what happens to everything that was not planned for. If it is noisy, the real alerts get lost among false alarms.
+With `type: None`, the routes only use the matchers written in the config, and the alerts reached Slack and email. 
 
 ---
+
+### 3. False alarms from built-in alerts
+
+Once the notifications worked, alerts that were never configured started to arrive in the inbox: `Watchdog`, `KubeControllerManagerDown` and `KubeSchedulerDown`.
+
+The cause: they are default alerts of `kube-prometheus-stack` that were firing all along, but the namespace matcher from the previous challenge had been hiding them. Switching it off let every alert reach the config, and each one that matched neither route fell through to the default receiver, which was `email`. `Watchdog` fires on purpose to prove that the pipeline works, and the other two can never be fixed on Amazon EKS, because AWS manages the control plane and does not expose those components to Prometheus.
+
+The fix was to make the default receiver a `null` receiver, defined without any configuration, so that everything that was not routed on purpose is discarded:
+
+```yaml
+spec:
+  route:
+    receiver: 'null'
+  receivers:
+  - name: 'null'
+```
+
+</details>
+
+---
+
+
