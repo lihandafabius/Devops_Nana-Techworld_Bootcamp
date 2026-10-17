@@ -20,7 +20,7 @@ This repository is my portfolio from the **TechWorld with Nana DevOps Bootcamp**
 | 3 | [**Build Automation & CI/CD with Jenkins**](./jenkins-exercises) | Pipelines that build, test and deliver applications automatically | Jenkins, Docker |
 | 4 | [**AWS Services**](./aws-exercises) | Core AWS services that underpin the cloud projects that follow | AWS, EC2, IAM, VPC |
 | 5 | [**Container Orchestration with Kubernetes**](./kubernetes-exercises) | Deploying a Java and MySQL application on Kubernetes, packaged as Helm charts | Kubernetes, Helm |
-| 6 | [**Kubernetes on AWS (EKS)**](./kubernetes-on-aws-exercises) | Java and MySQL application on Amazon EKS with Fargate, autoscaling, ingress and Jenkins-driven delivery | EKS, Fargate, ECR, NGINX Ingress, Jenkins |
+| 6 | [**Kubernetes on AWS (EKS)**](./kubernetes-on-AWS-exercises) | Java and MySQL application on Amazon EKS with Fargate, autoscaling, ingress and Jenkins-driven delivery | EKS, Fargate, ECR, NGINX Ingress, Jenkins |
 | 7 | [**Infrastructure as Code with Terraform**](https://github.com/lihandafabius/terraform-eks-infrastructure) | Reusable Terraform modules provisioning AWS infrastructure with remote state and a CI/CD pipeline *(separate repository)* | Terraform, S3, Jenkins |
 | 8 | [**Automation with Python**](./automation_with_python_exercises) | Boto3 scripts automating AWS resource monitoring and backups, run through Jenkins | Python, Boto3, Jenkins |
 | 9 | [**Configuration Management with Ansible**](./ansible-exercises) | Reusable playbooks and roles for server setup, application deployment and repository management | Ansible |
