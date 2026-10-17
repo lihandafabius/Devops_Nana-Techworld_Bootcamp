@@ -1,8 +1,5 @@
 <table>
   <tr>
-    <td width="70" align="center" valign="middle">
-      <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/kubernetes/kubernetes-original.svg" width="55" height="55" alt="DevOps Logo" />
-    </td>
     <td valign="middle">
       <h1 style="border-bottom: none; margin: 0; padding: 0; line-height: 1.2;">TechWorld with Nana DevOps Bootcamp</h1>
       <span style="font-size: 15px; color: #57606a;">Hands-on projects in cloud infrastructure, CI/CD, container orchestration, observability and automation</span>
@@ -13,8 +10,6 @@
 ---
 
 This repository is my portfolio from the **TechWorld with Nana DevOps Bootcamp**. It brings together the projects I built while working through the full DevOps lifecycle: packaging applications into containers, automating builds and deployments, provisioning cloud infrastructure as code, orchestrating workloads on Kubernetes, and monitoring them in production-like conditions.
-
-Each project is documented in its own README, covering the objective, implementation steps, and the challenges encountered along the way. Select a project below to open it.
 
 ## Projects
 
