@@ -40,4 +40,4 @@ This repository is my portfolio from the **TechWorld with Nana DevOps Bootcamp**
 
 
 
-The Terraform project lives in its own repository: [terraform-eks-infrastructure](https://github.com/lihandafabius/terraform-eks-infrastructure).
+**Note:** The Terraform project lives in its own repository: [terraform-eks-infrastructure](https://github.com/lihandafabius/terraform-eks-infrastructure).
