@@ -31,6 +31,15 @@
 
 This project adds that visibility to an existing setup: a Java application backed by MySQL, exposed through an Nginx Ingress, running on Kubernetes. It is split into **five exercises that build on each other**: deploying the application, collecting metrics from every component, defining alerts, routing notifications to Slack and email, and finally simulating real failures to prove the whole chain works end to end. A Grafana dashboard sits on top to make the traffic visible.
 
+---
+
+## Architecture
+
+
+![Architecture](images/monitoring_architecture.png)
+
+---
+
 ## Project objectives
 
 Across the exercises, these were my main objectives:
@@ -797,7 +806,7 @@ About 30 seconds later, the notification arrives in the Slack channel, because A
 
 When the load stops, the request rate drops, the alert clears, and Slack receives a **RESOLVED** message:
 
-![Java alert resolved](images/slack_java_alerrt_resolved.png)
+![Java alert resolved](images/slack_java_alert_resolved.png)
 
 
 ### Nginx: too many 4xx responses
@@ -814,7 +823,18 @@ done
 
 Every request returns a 404, so the 4xx share jumps toward 100% while the script runs and the alert follows after its one minute.
 
-![Email notification](images/email_notification.png)
+The script is run with the hostname of the load balancer, and it keeps requesting a path that does not exist:
+
+![Trigger Nginx Alert](images/trigger_nginx_alerts.png)
+
+Once more than 5% of the requests have been 4xx for a full minute, the alert is **Firing** in Prometheus and is handed to Alertmanager:
+
+![Nginx Firing](images/nginx_firing.png)
+
+About 30 seconds later the notification arrives by email, because Alertmanager routed the alert to the `email` receiver:
+
+![Email notification](images/alert_nginx_email_alert.png)
+
 
 ### MySQL
 
@@ -824,68 +844,100 @@ Deleting a single secondary pod triggers the StatefulSet alert, not `MysqlDown`,
 kubectl delete pod mysql-secondary-1 -n java-app
 ```
 
-To test `MysqlDown`, all MySQL pods are stopped (the data stays on the persistent volumes) and brought back afterwards:
+To test `MysqlDown`, all MySQL pods are stopped. The data stays on the persistent volumes, so nothing is lost:
 
 ```bash
 kubectl scale sts mysql-primary mysql-secondary -n java-app --replicas=0
+```
 
+The MySQL pods are terminated, and the cluster no longer has any MySQL instance:
+
+![Mysql test alert](images/mysql_test_alert.png)
+
+With the pods gone, their `mysql_up` metrics disappear as well. This is the case that `absent(mysql_up)` in the alert rule covers, so the alert fires even though there are no exporters left to report that MySQL is down:
+
+![Mysql test alert](images/mysql_firing.png)
+
+Meanwhile the Java application is running without its database, so the page that depends on MySQL no longer shows any data:
+
+![App without Database](images/app_without_db.png)
+
+To recover, MySQL is scaled back to its original size (1 primary and 2 secondaries), and the Java application is restarted:
+
+![Bring back mysql](images/resolve_mysql.png)
+
+```bash
 # recovery
 kubectl scale sts mysql-primary -n java-app --replicas=1
 kubectl scale sts mysql-secondary -n java-app --replicas=2
 kubectl rollout restart deployment/java-mysql-app -n java-app
 ```
 
-The restart of the Java application is needed because its single database connection does not reconnect by itself. In the alert message `Value = 1` is expected in this case, because it is the result of `absent(mysql_up)`, which returns 1 for "the metric is missing".
+The restart of the Java application is needed because its single database connection does not reconnect by itself.
+Finally, the restarted Java pods reconnect to the database, and the application shows its data again:
 
-![MySQL down alert in Slack](images/mysql_down_slack.png)
+![App with DB](images/app.png)
+
+Alertmanager routes the alert to the `slack` receiver. Slack receives a **FIRING** message while MySQL is down, and a **RESOLVED** message once the exporters report it as up again:
+
+![MySQL down alert in Slack](images/slack_notifications.png)
 
 </details>
 
 ---
-
 <details>
 <summary> Grafana Dashboard</summary>
 
 <br />
 
-Grafana is installed by the same chart and already has Prometheus configured as its data source, so only the panels needed to be built.
+Prometheus stores and alerts on the metrics, but Grafana makes them easy to read. It is installed by the same `kube-prometheus-stack` chart and already has Prometheus configured as its data source, so only the dashboard had to be built. Grafana is reached with a port-forward, and the admin password is stored in a Kubernetes Secret:
 
-| Panel | Query | Type |
-|---|---|---|
-| Nginx requests by status | `sum by (status) (rate(nginx_ingress_controller_requests[1m]))` | Time series |
-| Nginx 4xx percentage | `sum(rate(nginx_ingress_controller_requests{status=~"4.."}[1m])) / sum(rate(nginx_ingress_controller_requests[1m])) * 100` | Time series, threshold line at 5 |
-| Java request rate per pod | `sum by (pod) (rate(java_app_http_requests_total[1m]))` | Time series |
-| Java in-progress requests | `sum(java_app_inprogress_requests)` | Stat |
-| MySQL connections | `mysql_global_status_threads_connected` | Time series |
-| MySQL instances up | `sum(mysql_up) or vector(0)` | Stat |
-| StatefulSet ready replicas | `kube_statefulset_status_replicas_ready{namespace="java-app"}` | Time series |
-
-`or vector(0)` on the MySQL panel makes it show **0** when all instances are gone, instead of "No data". The same `absent()` trick belongs in the alert rule, not in the panel, because `absent()` returns 1 when something is missing.
-
-Dashboards built in the Grafana UI live inside the Grafana pod, and persistence is off by default, so a restart of the pod deletes them. The dashboard is therefore exported as JSON and stored in a ConfigMap. The Grafana sidecar loads every ConfigMap that carries the label `grafana_dashboard: "1"`:
-
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: java-app-dashboard
-  namespace: monitoring
-  labels:
-    grafana_dashboard: "1"
-data:
-  java-app-dashboard.json: |
-    <exported dashboard JSON>
+```bash
+kubectl port-forward -n monitoring svc/monitoring-grafana 8082:80
+kubectl get secret -n monitoring monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 -d
 ```
 
-```yaml
-    - name: Apply Grafana dashboard
-      kubernetes.core.k8s:
-        src: "{{ manifest_dir }}/grafana-dashboard.yaml"
-        state: present
-        kubeconfig: "{{ kubeconfig }}"
-```
+The dashboard, **Java App Traffic**, is split into four sections, one for each part of the setup, so that traffic and health can be followed at a glance:
 
-![Grafana dashboard](images/grafana_dashboard.png)
+| Row   | Panel | Query | Type | Unit |
+|---|---|---|---|---|
+| Nginx | Nginx requests by status | `sum by (status) (rate(nginx_ingress_controller_requests[1m]))` | Time series | requests/sec |
+| Nginx | Nginx 4xx percentage | `sum(rate(nginx_ingress_controller_requests{status=~"4.."}[1m])) / sum(rate(nginx_ingress_controller_requests[1m])) * 100` | Gauge | Percent (0-100) |
+| Java App | Java app request rate (per pod) | `sum by (pod) (rate(java_app_http_requests_total[1m]))` | Time series | requests/sec |
+| Java App | Java app in-progress requests | `sum(java_app_inprogress_requests)` | Stat | none |
+| MySQL | MySQL connections | `mysql_global_status_threads_connected` | Time series | none |
+| MySQL | MySQL instances up | `sum(mysql_up) or vector(0)` | Stat | none |
+| StatefulSets Replicas | StatefulSet ready replicas | `kube_statefulset_status_replicas_ready{namespace="java-app"}` | Time series | none |
+
+Each panel is created with **Dashboards → New → New dashboard → Add visualization**: select the **Prometheus** data source, switch the query editor from *Builder* to *Code*, paste the query, then choose the visualization type, the unit and a title.
+
+`or vector(0)` on the *MySQL instances up* panel makes it show **0** when all instances are gone, instead of "No data". The same case is handled in the alert rule with `absent()`, but that function does not belong in the panel, because `absent()` returns 1 when something is missing.
+
+#### Before the tests
+
+With nothing happening, the request rates stay flat. In MySQL, the connections are steady, all 3 instances are up, and the StatefulSets report their replicas as ready. This is the baseline for the tests of Exercise 5:
+
+![Nginx and Java App before firing](images/b4_test_nj_dash.png)
+
+![MySQL and StatefulSets before firing](images/b4_test_Ms_dash.png)
+
+#### After the Java application test
+
+The load script produces a clear spike on both sections. Nginx shows the `200` responses climbing to about 50 requests per second, and the request rate per pod peaks at about 17 on each of the three replicas, around 52 in total. This is far above the alert threshold of 10:
+
+![Dashboard after the Java test](images/after_java_app_test_dash.png)
+
+#### After the Nginx test
+
+The requests to a path that does not exist are all counted as `404`. The `404` line rises in *Nginx requests by status*, and the *Nginx 4xx percentage* gauge goes to 100, well beyond the 5% of the alert:
+
+![Dashboard after the Nginx test](images/nginx_too_many_requests_dash.png)
+
+#### After the MySQL test
+
+When the MySQL pods are scaled down, *MySQL instances up* drops to 0, the connections disappear, and the ready replicas of both StatefulSets fall to 0. They rise again once MySQL is scaled back up:
+
+![Dashboard after the MySQL test](images/mysql_alert_dash.png)
 
 </details>
 
@@ -896,22 +948,15 @@ data:
 
 <br />
 
-### 1. `no matches for kind "ServiceMonitor"` when deploying the ingress controller
+### 1. `ImagePullBackOff` on the MySQL exporter
 
-Rerunning the playbook on a fresh cluster failed at the Nginx task:
+After enabling `metrics.enabled` in the MySQL values, the MySQL pods showed `1/2` ready, with the exporter container stuck pulling its image:
 
-```
-no matches for kind "ServiceMonitor" in version "monitoring.coreos.com/v1"
-ensure CRDs are installed first
-```
+![ImagePullBackOff](images/mysql_error.png)
 
-The Nginx values ask the chart to create a ServiceMonitor, but that resource type is defined by the Prometheus Operator, which did not exist yet. The fix was ordering: `kube-prometheus-stack` is installed first with `wait: true`, so the Operator and its custom resource definitions are ready before anything that depends on them. The same reasoning applies to the MySQL metrics, the Java ServiceMonitor, the alert rules and the Alertmanager config.
+`mysql-primary-0` and `mysql-secondary-1` were stuck in `ImagePullBackOff`, while `mysql-secondary-0` was still `1/1` and running. A StatefulSet updates one pod at a time and waits for each one to become ready, so the remaining pod stayed on the old version and kept running. It is a safety feature: a bad update stops instead of breaking every replica, which is why the database kept serving the application during the failure.
 
----
-
-### 2. `ImagePullBackOff` on the MySQL exporter
-
-After enabling `metrics.enabled`, the MySQL pods showed `1/2` ready, with the exporter container stuck pulling its image. The default exporter image comes from the Bitnami repository affected by the 2025 catalogue change. Pointing it at the legacy repository, as already done for MySQL itself, fixed it:
+The cause: the default exporter image comes from the Bitnami repository affected by the 2025 catalogue change, so it can no longer be pulled. Pointing it at the legacy repository, as already done for MySQL itself, fixed it:
 
 ```yaml
 metrics:
@@ -919,72 +964,53 @@ metrics:
     registry: docker.io
     repository: bitnamilegacy/mysqld-exporter
 ```
+I then deleted the old failed pods and rolled out the restart deployment of the app to sync with the changes
 
-During the rollout only some pods were stuck. A StatefulSet updates one pod at a time and waits for each to become ready, so the remaining pod stayed on the old version and kept running. It is a safety feature: a bad update stops instead of breaking every replica.
+![Mysql Error fox](images/mysql_soln.png)
+
 
 ---
 
-### 3. Java target UP, but zero metrics
+### 2. Alerts firing in Prometheus, but no notifications
 
-The Prometheus target for the Java application was **UP**, yet the metric did not exist, and Grafana panels were empty. Looking at the target's own series showed the cause:
+The alerts reached the **Firing** state in Prometheus, and the Slack webhook worked when it was tested directly with `curl`, yet nothing arrived in Slack. The Alertmanager log had no entries about Slack at all, which meant it never even tried to send anything. The alert only carried two labels, `alertname` and `severity`.
 
-```
-scrape_samples_scraped = 0
-```
+The cause: the Prometheus Operator automatically adds a `namespace="monitoring"` matcher to every route of an `AlertmanagerConfig`, the namespace the config lives in. This protects shared clusters from one team's config catching another team's alerts. The alerts in this project do not carry that label, so none of them matched a route.
 
-Prometheus could reach port 8081 and got a valid but **empty** response. The project used two generations of the Prometheus Java client at once:
-
-| Library | Dependencies | Used by |
-|---|---|---|
-| Old client (0.16.0) | `simpleclient` | `AppController` (the counter and gauge) |
-| New client (1.3.3) | `prometheus-metrics-*` | The HTTP server on port 8081 |
-
-Each client has its own registry, and the server on 8081 only serves the new one, so the controller's metrics were never exposed. The fix was the official bridge library, registered before the server starts:
-
-```gradle
-implementation 'io.prometheus:prometheus-metrics-simpleclient-bridge:1.3.3'
-```
-
-```java
-SimpleclientCollector.builder().register();
-JvmMetrics.builder().register();   // optional: memory, GC and thread metrics
-HTTPServer server = HTTPServer.builder().port(8081).buildAndStart();
-```
-
-Because the image tag does not change, `kubectl rollout restart deployment/java-mysql-app -n java-app` is needed after pushing the new image.
-
----
-
-
-### 5. Unwanted emails from default alerts
-
-Once routing worked, emails started arriving for `KubeControllerManagerDown`, `KubeSchedulerDown` and `Watchdog`. They are default alerts of the stack that were always firing but had been filtered out by the namespace matcher. `Watchdog` fires on purpose to prove the pipeline works. The other two are false alarms on Amazon EKS, where AWS manages the control plane and does not expose those components to Prometheus. Two changes fixed it:
-
-- The default receiver of the route became `null`, so only the explicit routes notify anyone.
-- The rules that cannot work on EKS were disabled in the stack values:
+The fix was to switch off that matcher in the values of the `kube-prometheus-stack` task:
 
 ```yaml
-          defaultRules:
-            rules:
-              kubeControllerManager: false
-              kubeSchedulerAlerting: false
-              etcd: false
-              kubeProxy: false
-          kubeControllerManager:
-            enabled: false
-          kubeScheduler:
-            enabled: false
-          kubeEtcd:
-            enabled: false
-          kubeProxy:
-            enabled: false
+              alertmanagerConfigMatcherStrategy:
+                type: None
 ```
 
-
-
-### 6. Flood of emails from built-in alerts
-
-Once the notifications worked, the inbox started receiving emails for alerts that were never configured: `Watchdog`, `KubeControllerManagerDown` and `KubeSchedulerDown`. They are default alerts of `kube-prometheus-stack` that were always firing, but had been filtered out until `alertmanagerConfigMatcherStrategy: None` was set. Every alert that matched neither route fell through to the default receiver, which was `email`. On Amazon EKS two of them can never be fixed, because AWS manages the control plane and does not expose those components to Prometheus.
-The fix was to make the default receiver a `null` receiver, defined without any configuration, so only the five alerts routed on purpose notify anyone. Lesson learned: the default receiver decides what happens to everything that was not planned for. If it is noisy, the real alerts get lost among false alarms.
+With `type: None`, the routes only use the matchers written in the config, and the alerts reached Slack and email. 
 
 ---
+
+### 3. False alarms from built-in alerts
+
+Once the notifications worked, alerts that were never configured started to arrive in the inbox: `Watchdog`, `KubeControllerManagerDown` and `KubeSchedulerDown`.
+
+The cause: they are default alerts of `kube-prometheus-stack` that were firing all along, but the namespace matcher from the previous challenge had been hiding them. Switching it off let every alert reach the config, and each one that matched neither route fell through to the default receiver, which was `email`. `Watchdog` fires on purpose to prove that the pipeline works, and the other two can never be fixed on Amazon EKS, because AWS manages the control plane and does not expose those components to Prometheus.
+
+The fix was to make the default receiver a `null` receiver, defined without any configuration, so that everything that was not routed on purpose is discarded:
+
+```yaml
+spec:
+  route:
+    receiver: 'null'
+  receivers:
+  - name: 'null'
+```
+
+</details>
+
+---
+
+## Conclusion
+
+A system that can’t tell you when it’s struggling leaves you guessing. This project changed that. Instead of waiting for a user to report a problem, the application now raises its own hand: Prometheus watches, Alertmanager taps the right shoulder, and Grafana shows what was happening around the moment things went wrong.
+
+The biggest takeaway was that monitoring only counts once it has been proven. Breaking things on purpose, then seeing the alert arrive in Slack or an inbox, turned the setup from something I hoped would work into something I know works. This is only the foundation. The same approach of measure, alert, then prove it works can be applied to any service I build next, so that problems are found by the system first, not by the people using it.
+
