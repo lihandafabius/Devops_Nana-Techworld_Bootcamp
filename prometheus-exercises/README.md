@@ -31,6 +31,15 @@
 
 This project adds that visibility to an existing setup: a Java application backed by MySQL, exposed through an Nginx Ingress, running on Kubernetes. It is split into **five exercises that build on each other**: deploying the application, collecting metrics from every component, defining alerts, routing notifications to Slack and email, and finally simulating real failures to prove the whole chain works end to end. A Grafana dashboard sits on top to make the traffic visible.
 
+---
+
+## Architecture
+
+
+![Architecture](images/monitoring_architecture.png)
+
+---
+
 ## Project objectives
 
 Across the exercises, these were my main objectives:
