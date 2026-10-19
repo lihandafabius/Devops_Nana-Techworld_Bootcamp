@@ -36,7 +36,7 @@ This project adds that visibility to an existing setup: a Java application backe
 ## Architecture
 
 
-![Architecture](images/monitoring_architecture.png)
+![Architecture](images/monitoring_architecture.jpeg)
 
 ---
 
