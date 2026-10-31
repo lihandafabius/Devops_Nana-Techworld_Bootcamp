@@ -46,7 +46,7 @@ spec:
     app: emailservice
   ports:
   - protocol: TCP
-    port: 5000
+    port: 5000 # where the email deployment is exposed to other services within the cluster. This is the port that other services will use to communicate with the email service.
     targetPort: 8080
 
 ---

@@ -5,8 +5,8 @@ metadata:
   namespace: monitoring
 spec:
   route:
-    receiver: 'email'          # default for anything not matched below, use 'null' to discard anything not matched if they are not important.
-    repeatInterval: 30m        # if the issue still persist send another email in 30 mins time
+    receiver: 'null'           # default: anything not matched below is discarded
+    repeatInterval: 30m        # if the issue still persists, notify again after 30 minutes
     routes:
     - receiver: 'slack'
       matchers:
@@ -22,6 +22,7 @@ spec:
       repeatInterval: 30m
 
   receivers:
+  - name: 'null'
   - name: 'slack'
     slackConfigs:
     - apiURL:
@@ -34,11 +35,11 @@ spec:
 
   - name: 'email'
     emailConfigs:
-    - to: 'fabiuslihandaachevi@gmail.com'
-      from: 'fabiuslihandaachevi@gmail.com'
+    - to: '<recipient-address>'
+      from: '<sender-address>'
       smarthost: 'smtp.gmail.com:587'
-      authUsername: 'fabiuslihandaachevi@gmail.com'
-      authIdentity: 'fabiuslihandaachevi@gmail.com'
+      authUsername: '<sender-address>'
+      authIdentity: '<sender-address>'
       authPassword:
         name: gmail-auth
         key: password
