@@ -396,7 +396,7 @@ kind: Deployment
 metadata:
   name: redis-cart
 spec:
-  replicas: 1
+  replicas: 1 # Avoids data inconsistency issues with multiple Redis instances. Redis is a single-threaded database, and running multiple instances can lead to data inconsistency if they are not properly configured for clustering or replication.
   selector:
     matchLabels:
       app: redis-cart
