@@ -23,8 +23,3 @@ containerEnvVars:
 
 serviceType: LoadBalancer
 servicePort: 80
-
-loadBalancerClass: eks.amazonaws.com/nlb
-
-serviceAnnotations:
-  service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing

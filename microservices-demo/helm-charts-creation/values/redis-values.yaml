@@ -1,3 +1,3 @@
 appName: redis-cart
-appReplicas: 2
+appReplicas: 1 # to prevent data inconsistency
 
