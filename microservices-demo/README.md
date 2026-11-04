@@ -7,7 +7,7 @@ A hands-on project where I deployed Google's [Online Boutique microservices demo
 ## What I Built
 
 - 11 microservices, each with its own **Deployment** and **Service** in a single YAML file
-- A **Kubernetes cluster with 3 worker nodes**, created with Terraform (from my [Terraform EKS project](https://github.com/lihandafabius))
+- A **Kubernetes cluster with 3 worker nodes**, created with Terraform (from my [Terraform EKS project]([https://github.com/lihandafabius](https://github.com/lihandafabius/terraform-eks-infrastructure)))
 - A dedicated **Namespace** holding the whole application
 - Only the **frontend is public** (LoadBalancer). Every other service is internal (ClusterIP)
 
@@ -37,20 +37,6 @@ The frontend is the only entry point. Services communicate inside the cluster by
 
 ## How to Deploy
 
-```bash
-# 1. Connect to your cluster
-kubectl get nodes                      # should show 3 worker nodes
-
-# 2. Create a namespace and deploy everything into it
-kubectl create namespace microservices
-kubectl apply -f config.yaml -n microservices
-
-# 3. Check everything is running
-kubectl get pods -n microservices
-
-# 4. Get the public address of the application
-kubectl get svc frontend -n microservices   # open the EXTERNAL-IP in your browser
-```
 
 ---
 
@@ -129,10 +115,7 @@ spec:
 ### 7. Use more than one worker node
 A single node is a single point of failure (crashes, maintenance, update reboots). With 3 nodes, replicas spread out and the application survives losing one.
 
-```bash
-kubectl get nodes
-kubectl get pods -n microservices -o wide    # see pods spread across nodes
-```
+
 
 ### 8. Label everything
 Labels are key-value pairs used to identify and group resources. Services use them to find their Pods.
@@ -164,25 +147,13 @@ kubectl apply -f config.yaml -n microservices
 ### 10. Scan images for vulnerabilities
 Base images and third-party libraries can contain known vulnerabilities. Scan images manually or, better, automatically in the CI/CD pipeline.
 
-```bash
-trivy image gcr.io/google-samples/microservices-demo/frontend:v0.8.0
-```
 
 ### 11. Don't run containers as root
 A compromised root container has access to host-level resources, which makes the potential damage much greater.
 
-```yaml
-securityContext:
-  runAsNonRoot: true
-  allowPrivilegeEscalation: false
-```
 
 ### 12. Keep Kubernetes up to date
 New versions include patches for known security issues. With multiple nodes and replicas on different nodes, upgrades can be done with zero downtime.
 
-```bash
-kubectl version
-kubectl drain <node-name> --ignore-daemonsets    # move pods off a node before upgrading it
-```
 
 ---
