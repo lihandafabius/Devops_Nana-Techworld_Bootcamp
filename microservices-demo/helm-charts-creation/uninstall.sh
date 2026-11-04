@@ -1,10 +1,10 @@
-helm uninstall rediscart
-helm uninstall cartservice
-helm uninstall checkoutservice
-helm uninstall currencyservice
-helm uninstall paymentservice
-helm uninstall productcatalogservice
-helm uninstall emailservice
-helm uninstall recommendationservice
-helm uninstall shippingservice
-helm uninstall frontendservice
+helm uninstall rediscart -n microservices
+helm uninstall cartservice -n microservices
+helm uninstall checkoutservice -n microservices
+helm uninstall currencyservice -n microservices
+helm uninstall paymentservice -n microservices
+helm uninstall productcatalogservice -n microservices
+helm uninstall emailservice -n microservices
+helm uninstall recommendationservice -n microservices   
+helm uninstall shippingservice -n microservices
+helm uninstall frontendservice -n microservices
