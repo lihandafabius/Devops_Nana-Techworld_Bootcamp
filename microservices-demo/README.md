@@ -15,8 +15,6 @@ This project demonstrates how to deploy Google's [Online Boutique microservices 
 
 The application was first deployed using a **plain Kubernetes manifest** with 11 Deployments and Services, then packaged into reusable **Helm charts**, and finally managed declaratively using **Helmfile**. Only the **frontend** is exposed publicly through a LoadBalancer, while every other service stays internal.
 
----
-
 ## Architecture
 
 ```mermaid
