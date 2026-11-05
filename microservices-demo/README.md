@@ -11,7 +11,7 @@
 </table>
 
 ---
-This project demonstrates how to deploy Google's [Online Boutique microservices demo](https://github.com/GoogleCloudPlatform/microservices-demo) on Kubernetes following production and security best practices. The cluster was provisioned with Terraform in my [previous project](https://github.com/lihandafabius/terraform-eks-infrastructure), and this project builds on it by deploying the application on top.
+This project demonstrates how to deploy Google's [Online Boutique microservices demo](https://github.com/GoogleCloudPlatform/microservices-demo) on Kubernetes following production and security best practices. The cluster was provisioned with Terraform in my [previous project](https://github.com/lihandafabius/terraform-eks-infrastructure).
 
 The application was first deployed using a **plain Kubernetes manifest** with 11 Deployments and Services, then packaged into reusable **Helm charts**, and finally managed declaratively using **Helmfile**. Only the **frontend** is exposed publicly through a LoadBalancer, while every other service stays internal.
 
@@ -323,9 +323,3 @@ kubectl create namespace microservices
 **12. Keep Kubernetes up to date.** New versions patch security issues, and with multiple nodes and replicas upgrades can be done with zero downtime.
 
 </details>
-
----
-
-## Summary
-
-This project took the same microservices application through three stages of deployment: a plain manifest, reusable Helm charts with one values file per service, and a Helmfile that declares the whole application in one place. Along the way, production and security best practices were applied to keep the application predictable, available and secure.
