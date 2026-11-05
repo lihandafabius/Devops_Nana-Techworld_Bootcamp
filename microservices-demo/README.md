@@ -1,7 +1,7 @@
 <table>
   <tr>
     <td width="70" align="center" valign="middle">
-      <img src="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/kubernetes/kubernetes-original.svg" width="55" height="55" alt="Kubernetes Logo" />
+      <img src="images/microservices-logo.svg" width="55" height="55" alt="Microservices Logo" />
     </td>
     <td valign="middle">
       <h1 style="border-bottom: none; margin: 0; padding: 0; line-height: 1.2;">Microservices on Kubernetes</h1>
@@ -93,7 +93,7 @@ microservices-demo/
 
 ---
 <details>
-<summary>Exercise 1: Deploy with a plain manifest</summary>
+<summary>Deploy with a plain manifest</summary>
 
 <br />
 
@@ -103,16 +103,26 @@ All 11 Deployments and Services were first written in a single `config.yaml`, wi
 kubectl create namespace microservices
 kubectl apply -f config.yaml -n microservices
 kubectl get pods -n microservices
-kubectl get svc frontend -n microservices   # open the EXTERNAL-IP in the browser
+kubectl get svc frontend -n microservices   # get alb adress
 ```
 
 </details>
 
 ---
 <details>
-<summary>Exercise 2: Package the services into Helm charts</summary>
+<summary>Package the services into Helm charts</summary>
 
 <br />
+
+**Helm** is the package manager for Kubernetes, and a **Helm chart** is a package of templated Kubernetes manifests (Deployment, Service, and so on) that can be configured through a values file. Instead of writing a separate YAML manifest for every service, the manifests are written once as templates and the parts that change are replaced with values at install time.
+
+**Why Helm charts matter:**
+
+* **Reusability:** one chart can deploy many services, which removes duplicated YAML
+* **Configurability:** differences between services (name, image, replicas, ports, environment variables) are passed in through values files, so the chart never needs to be edited
+* **Consistency:** every service is deployed with the same structure and the same best practices
+* **Easier maintenance:** a change to the template (for example adding a probe) is made once and applies to all services that use the chart
+* **Release management:** each install is tracked as a release, so it can be listed, upgraded, rolled back or uninstalled with a single command
 
 Ten of the eleven services share the same structure, so they use **one** `microservices` chart. Redis is stateful and has its own chart. Each service only supplies a values file with its name, image, version, replicas, ports and environment variables.
 
@@ -122,7 +132,6 @@ Installing 11 releases one by one is slow, so the commands were placed in `insta
 
 ```bash
 helm install rediscart ./charts/redis -f values/redis-values.yaml -n microservices
-
 helm install cartservice ./charts/microservices -f values/cart-service-values.yaml -n microservices
 helm install checkoutservice ./charts/microservices -f values/checkout-service-values.yaml -n microservices
 helm install currencyservice ./charts/microservices -f values/currency-service-values.yaml -n microservices
@@ -138,7 +147,7 @@ helm install frontendservice ./charts/microservices -f values/frontend-values.ya
 
 ---
 <details>
-<summary>Exercise 3: Manage releases declaratively with Helmfile</summary>
+<summary>Manage releases declaratively with Helmfile</summary>
 
 <br />
 
@@ -208,10 +217,31 @@ releases:
       - values/payment-service-values.yaml
 ```
 
+**Prerequisites:** `helm`, `helmfile`, and the `helm-diff` plugin (needed by `diff` and `apply`).
+ 
 ```bash
-helmfile -n microservices apply     # install or update all releases
-helmfile -n microservices destroy   # remove all releases
+helm plugin install https://github.com/databus23/helm-diff
 ```
+
+Useful Helmfile commands to remember
+
+| Command | What it does |
+|---|---|
+| `helmfile sync` | Installs or updates **every** release declared in `helmfile.yaml` |
+| `helmfile diff` | Previews what would change in the cluster without applying anything |
+| `helmfile apply` | Runs a `diff` first, then syncs **only the releases that changed** |
+| `helmfile destroy` | Removes all releases declared in `helmfile.yaml` |
+| `helm list` | Lists the releases installed in the namespace |
+
+
+![Deploy with Helmfile](images/deploy_with_helmfile.png)
+
+Verify the microservice application in the browser
+
+![Get ALB address](images/alb.png)
+
+![Application](images/app.png)
+
 
 </details>
 
