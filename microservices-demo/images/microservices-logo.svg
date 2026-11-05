@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="Microservices logo">
+  <!-- ring connections -->
+  <g stroke="#9aa4b2" stroke-width="2" stroke-linecap="round" opacity="0.7">
+    <line x1="60" y1="16" x2="98" y2="38"/>
+    <line x1="98" y1="38" x2="98" y2="82"/>
+    <line x1="98" y1="82" x2="60" y2="104"/>
+    <line x1="60" y1="104" x2="22" y2="82"/>
+    <line x1="22" y1="82" x2="22" y2="38"/>
+    <line x1="22" y1="38" x2="60" y2="16"/>
+  </g>
+  <!-- spokes to the center -->
+  <g stroke="#57606a" stroke-width="2.5" stroke-linecap="round">
+    <line x1="60" y1="60" x2="60" y2="16"/>
+    <line x1="60" y1="60" x2="98" y2="38"/>
+    <line x1="60" y1="60" x2="98" y2="82"/>
+    <line x1="60" y1="60" x2="60" y2="104"/>
+    <line x1="60" y1="60" x2="22" y2="82"/>
+    <line x1="60" y1="60" x2="22" y2="38"/>
+  </g>
+  <!-- services -->
+  <g fill="#82b366" stroke="#5a8a3f" stroke-width="2">
+    <rect x="50" y="8" width="20" height="16" rx="4"/>
+    <rect x="88" y="30" width="20" height="16" rx="4"/>
+    <rect x="88" y="74" width="20" height="16" rx="4"/>
+    <rect x="12" y="74" width="20" height="16" rx="4"/>
+    <rect x="12" y="30" width="20" height="16" rx="4"/>
+  </g>
+  <!-- data store -->
+  <rect x="50" y="96" width="20" height="16" rx="4" fill="#ffb366" stroke="#d79b00" stroke-width="2"/>
+  <!-- frontend / entry point -->
+  <rect x="46" y="49" width="28" height="22" rx="5" fill="#7ea6e0" stroke="#4a6fa5" stroke-width="2.5"/>
+</svg>
